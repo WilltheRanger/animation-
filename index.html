@@ -1,0 +1,1921 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Ant and the Melon</title>
+<style>
+  :root {
+    --surround: #15100c;
+    --panel: #211a14;
+    --panel-hi: #2d241c;
+    --paper: #f1e6cf;
+    --muted: #9b8c74;
+    --line: rgba(241, 230, 207, 0.16);
+    --ink: #2b1d13;
+    --melon: #e0523f;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--surround);
+    color: var(--paper);
+    font: 14px/1.3 ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  button { font: inherit; color: inherit; }
+  #app {
+    height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px;
+    padding-inline: 16px; padding-block: 12px;
+  }
+  #stage {
+    position: relative; flex: none;
+    width: 270px; height: 480px;
+    border-radius: 6px; overflow: hidden;
+    background: var(--paper);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .05);
+    container-type: size;
+  }
+  #film { display: block; width: 100%; height: 100%; }
+  .veil { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; }
+  #loading {
+    justify-content: center; gap: 14px;
+    background: var(--paper); color: var(--ink);
+    font-size: max(13px, 3.6cqw); letter-spacing: .02em;
+  }
+  #loading .track { width: 46%; height: 3px; border-radius: 2px; background: rgba(43, 29, 19, .14); overflow: hidden; }
+  #loading .track i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .12s linear; }
+  #intro {
+    justify-content: space-between;
+    padding-block: 7cqh 10cqh;
+    color: var(--ink);
+    border: 0; background: none; width: 100%; cursor: pointer;
+  }
+  #intro h1 {
+    margin: 0;
+    font: 600 10.5cqw/1 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    letter-spacing: -.01em; text-align: center; text-wrap: balance;
+  }
+  #intro h1 small {
+    display: block; margin-top: 2.2cqw;
+    font: 600 3cqw/1.2 ui-rounded, system-ui, sans-serif;
+    letter-spacing: .18em; text-transform: uppercase; color: rgba(43, 29, 19, .62);
+  }
+  #intro .go { display: flex; flex-direction: column; align-items: center; gap: 2.6cqw; }
+  #intro .disc {
+    width: 21cqw; height: 21cqw; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--ink); color: var(--paper);
+    box-shadow: 0 1.4cqw 4cqw rgba(30, 20, 10, .35);
+    transition: transform .15s ease;
+  }
+  #intro:hover .disc { transform: scale(1.05); }
+  #intro:focus-visible .disc { outline: 3px solid var(--paper); outline-offset: 4px; }
+  #intro .disc svg { width: 42%; height: 42%; margin-left: 8%; }
+  #intro .hint {
+    font: 600 3.3cqw/1 ui-rounded, system-ui, sans-serif; letter-spacing: .08em;
+    color: var(--paper); background: rgba(33, 22, 14, .72);
+    padding: 1.6cqw 3cqw; border-radius: 99px;
+  }
+  #recBadge {
+    position: absolute; top: 3.2cqw; left: 3.2cqw;
+    display: flex; align-items: center; gap: 7px;
+    padding: 6px 10px; border-radius: 99px;
+    background: rgba(21, 16, 12, .74); color: var(--paper);
+    font: 600 11px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .06em;
+    font-variant-numeric: tabular-nums;
+  }
+  #recBadge .dot, .btn .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--melon); flex: none; }
+  #recBadge .dot { animation: pulse 1s ease-in-out infinite; }
+  #toast {
+    position: absolute; left: 50%; bottom: 4cqw; transform: translateX(-50%);
+    width: max-content; max-width: 88%;
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 10px;
+    background: rgba(21, 16, 12, .86); color: var(--paper);
+    font-size: 13px; line-height: 1.3;
+  }
+  #toast button {
+    flex: none; height: 30px; padding: 0 11px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink); font-weight: 700; cursor: pointer;
+  }
+  #bar { flex: none; width: 270px; display: flex; flex-direction: column; gap: 10px; }
+  #timeline { display: flex; gap: 3px; }
+  .seg {
+    flex: 1 1 0; min-width: 0;
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 2px 0; border: 0; background: none; cursor: pointer;
+    color: var(--muted); text-align: left;
+    font: 700 10.5px/1 ui-rounded, system-ui, sans-serif; letter-spacing: .09em; text-transform: uppercase;
+  }
+  .seg span { overflow: hidden; white-space: nowrap; text-overflow: clip; }
+  .seg .trk { position: relative; height: 4px; border-radius: 2px; background: rgba(241, 230, 207, .14); overflow: hidden; }
+  .seg .trk i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--paper); }
+  .seg.on { color: var(--paper); }
+  .seg:hover { color: var(--paper); }
+  .seg:focus-visible { outline: 2px solid var(--paper); outline-offset: 3px; border-radius: 3px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .btn {
+    height: 38px; display: inline-flex; align-items: center; gap: 7px;
+    padding: 0 13px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--paper);
+    font: 650 13px/1 ui-rounded, system-ui, sans-serif; cursor: pointer;
+  }
+  .btn:hover { background: var(--panel-hi); }
+  .btn:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn svg { width: 15px; height: 15px; flex: none; }
+  .btn.rec.on { border-color: rgba(224, 82, 63, .75); }
+  .btn.rec.on .dot { border-radius: 2px; }
+  #clock {
+    margin-left: auto;
+    font: 500 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap;
+  }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @media (max-width: 400px) {
+    .btn { padding: 0 11px; }
+    .btn span:not(.dot) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #recBadge .dot { animation: none; }
+    #intro .disc { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="film" width="1080" height="1920" aria-label="Animated film: an ant taps a giant watermelon until it splits open"></canvas>
+    <div id="loading" class="veil"><span>Sharpening pencils…</span><div class="track"><i></i></div></div>
+    <button id="intro" class="veil" type="button" hidden aria-label="Play the film with sound">
+      <h1>The Ant and the Melon<small>A 45-second short with sound</small></h1>
+      <span class="go">
+        <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 3.8c0-.9 1-1.5 1.8-1l13 8.2c.7.5.7 1.5 0 2L7.8 21.2c-.8.5-1.8-.1-1.8-1z"/></svg></span>
+        <span class="hint">Tap to play · sound on</span>
+      </span>
+    </button>
+    <div id="recBadge" hidden><span class="dot"></span><span id="recTime">REC 0.0</span></div>
+    <div id="toast" hidden role="status"><span id="toastMsg"></span><button id="toastBtn" type="button" hidden>Save video</button></div>
+  </div>
+  <div id="bar">
+    <div id="timeline" role="group" aria-label="Jump to a scene"></div>
+    <div class="row">
+      <button id="playBtn" class="btn" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path id="playIcon" fill="currentColor" d="M6 3.8c0-.9 1-1.5 1.8-1l13 8.2c.7.5.7 1.5 0 2L7.8 21.2c-.8.5-1.8-.1-1.8-1z"/></svg>
+        <span id="playLabel">Play</span>
+      </button>
+      <button id="restartBtn" class="btn" type="button" aria-label="Restart from the beginning">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4 12a8 8 0 1 0 2.6-5.9M4 4v5h5"/></svg>
+        <span>Restart</span>
+      </button>
+      <button id="recBtn" class="btn rec" type="button" aria-label="Record the film to a video file">
+        <span class="dot"></span><span id="recLabel">Record</span>
+      </button>
+      <output id="clock">0.0 / 45.0</output>
+    </div>
+  </div>
+</div>
+
+<!-- Music engine. cdnjs first; jsDelivr is only a fallback if cdnjs is unreachable. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js" onerror="window.__toneFailed = true"></script>
+
+<script>
+(() => {
+'use strict';
+
+/* =========================================================================
+   TIMELINE — the one place to change timing.
+   Each scene has a start and end in seconds. `cues` are named moments
+   inside a scene, written as a fraction of that scene's length
+   (0 = scene start, 1 = scene end). The animation and the music both read
+   these, so stretching or moving a scene carries its sounds with it.
+   ========================================================================= */
+const SCENES = [
+  { id: 'walk',  label: 'Walk',  start: 0,  end: 8,
+    cues: { pause: 0.44, resume: 0.57, arrive: 0.97 } },            // stops to sniff at 3.5s, arrives 7.8s
+  { id: 'tap',   label: 'Tap',   start: 8,  end: 14,
+    cues: { sniff: 0.08, antenna1: 0.14, antenna2: 0.21, lift: 0.30,
+            tap1: 0.40, tap2: 0.50, tap3: 0.63, look: 0.78 } },      // tap3 (11.8s) = crack appears
+  { id: 'creep', label: 'Creep', start: 14, end: 30,
+    cues: { edge: 0.10, lean: 0.28, glance: 0.62 } },                // crack creeps; ant peers over
+  { id: 'split', label: 'Split', start: 30, end: 38,
+    cues: { backAway: 0.08, pop: 0.50, land: 0.625, grab: 0.90 } },  // pop = 34.0s, lands 35.0s
+  { id: 'feast', label: 'Feast', start: 38, end: 45,
+    cues: { fade: 0.40 } },                                          // fade to paper from 40.8s
+];
+
+// Beats of music written for each scene. The tempo stretches with the scene,
+// so phrases always land on scene boundaries (120 BPM at the default timing).
+const MUSIC_BEATS = { walk: 16, tap: 12, creep: 32, split: 16, feast: 14 };
+
+const CONFIG = {
+  W: 1080, H: 1920,          // canvas pixels (portrait 9:16)
+  boilFps: 8,                // line boil: hatching is re-randomised this many times a second
+  boilPasses: 4,             // randomised hatch passes per layer that the boil shuffles between
+  fadeColor: '#f1e6cf',      // end fade colour (paper). '#000000' fades to black instead.
+  posterTime: 10.4,          // frame shown under the Play button
+  recordFps: 30,
+  recordVideoBps: 8e6,
+  recordTail: 0.8,           // seconds recorded after the end so the last chord rings out
+};
+
+/* ------------------------------------------------------------------------ */
+const W = CONFIG.W, H = CONFIG.H;
+const FILM_END = SCENES[SCENES.length - 1].end;
+const sceneById = Object.fromEntries(SCENES.map(s => [s.id, s]));
+const cue = (id, name) => { const s = sceneById[id]; return s.start + (s.end - s.start) * s.cues[name]; };
+const sceneAt = t => SCENES.find(s => t < s.end) || SCENES[SCENES.length - 1];
+
+/* ========================== small math kit ============================== */
+const TAU = Math.PI * 2;
+const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
+const lerp = (a, b, t) => a + (b - a) * t;
+const invLerp = (a, b, x) => clamp((x - a) / (b - a || 1e-9));
+const smooth = t => t * t * (3 - 2 * t);
+const easeOut3 = t => 1 - (1 - t) * (1 - t) * (1 - t);
+const easeInOut = t => (t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t));
+const easeOutBack = t => { const c = 1.7, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
+const frac = x => x - Math.floor(x);
+const tri = x => 1 - 4 * Math.abs(frac(x + 0.25) - 0.5);           // triangle wave, period 1, -1..1
+const pulse = (t, t0, a, d) => (t < t0 - a || t > t0 + d) ? 0 : t < t0 ? smooth((t - t0 + a) / a) : 1 - smooth((t - t0) / d);
+
+function hash3(a, b = 0, c = 0) {
+  let h = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul((b | 0) + 0x165667b1, 0x85ebca77) ^ Math.imul((c | 0) + 0x9e3779b9, 0xc2b2ae3d);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+const rand3 = (a, b, c) => hash3(a, b, c) / 4294967296;
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function vnoise(x, seed = 0) {                                      // smooth value noise, -1..1
+  const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f);
+  const a = rand3(i, seed, 7), b = rand3(i + 1, seed, 7);
+  return (a + (b - a) * u) * 2 - 1;
+}
+// Keyframe track: keys are [time, value, ease?]; ease shapes the segment that ends at that key.
+function track(keys) {
+  const k = keys.slice().sort((a, b) => a[0] - b[0]);
+  return t => {
+    if (t <= k[0][0]) return k[0][1];
+    for (let i = 1; i < k.length; i++) {
+      if (t <= k[i][0]) {
+        const p = k[i - 1], q = k[i];
+        return lerp(p[1], q[1], (q[2] || smooth)(invLerp(p[0], q[0], t)));
+      }
+    }
+    return k[k.length - 1][1];
+  };
+}
+const mkCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h); return c; };
+
+/* ============================ the world ================================= */
+// A giant melon seen from a low camera: only the top of a huge ellipse is in frame.
+const MELON = { cx: 540, cy: 1905, a: 930, b: 830 };               // top of rind at y = 1075
+const RIND = 46;
+const FLESH = { cx: 540, cy: 1905, a: MELON.a - RIND, b: MELON.b - RIND };
+const ellipseY = (E, x) => { const u = (x - E.cx) / E.a; return E.cy - E.b * Math.sqrt(Math.max(0, 1 - u * u)); };
+const fleshTopY = x => ellipseY(FLESH, x) + 2.4 * vnoise(x * 0.045, 3) + 1.3 * vnoise(x * 0.14, 4);
+
+// Walkable top edge of an ellipse, addressed by arc length (0 at the crest).
+function makeSurface(E) {
+  const N = 1600, PSI = 1.3;
+  const X = new Float64Array(N + 1), Y = new Float64Array(N + 1), S = new Float64Array(N + 1);
+  for (let i = 0; i <= N; i++) {
+    const p = -PSI + (2 * PSI * i) / N;
+    X[i] = E.cx + E.a * Math.sin(p);
+    Y[i] = E.cy - E.b * Math.cos(p);
+    S[i] = i ? S[i - 1] + Math.hypot(X[i] - X[i - 1], Y[i] - Y[i - 1]) : 0;
+  }
+  const mid = S[N / 2];
+  for (let i = 0; i <= N; i++) S[i] -= mid;
+  const find = (A, v) => { let lo = 0, hi = N; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (A[m] <= v) lo = m; else hi = m; } return lo; };
+  return {
+    at(s) {
+      const i = clamp(find(S, s), 0, N - 1);
+      const f = clamp((s - S[i]) / (S[i + 1] - S[i]), -3, 4);
+      const ang = Math.atan2(Y[i + 1] - Y[i], X[i + 1] - X[i]);
+      return { x: X[i] + (X[i + 1] - X[i]) * f, y: Y[i] + (Y[i + 1] - Y[i]) * f, ang, nx: Math.sin(ang), ny: -Math.cos(ang) };
+    },
+    sAtX(x) { const i = find(X, x); return S[i] + (S[i + 1] - S[i]) * (x - X[i]) / (X[i + 1] - X[i]); },
+  };
+}
+const MELON_SURF = makeSurface(MELON);
+const FLESH_SURF = makeSurface(FLESH);
+
+/* ============================== crack =================================== */
+const CRACK = (() => {
+  const rng = mulberry32(4242);
+  const x0 = 578, y0 = ellipseY(MELON, 578) + 2;
+  const main = [[x0, y0]];
+  let x = x0, y = y0, side = 1;
+  while (y < H + 170) {
+    const depth = clamp((y - y0) / (H - y0));
+    const seg = lerp(10, 58, Math.pow(depth, 0.85)) * (0.6 + 0.8 * rng());
+    if (rng() < 0.8) side = -side;
+    const centre = x0 + 55 * Math.sin(depth * 3.3 + 0.4) - 40 * depth;
+    const pull = clamp((centre - x) / 140, -0.45, 0.45);
+    const ang = Math.PI / 2 + side * (0.5 + 0.55 * rng()) - pull;
+    x += Math.cos(ang) * seg;
+    y += Math.sin(ang) * seg * lerp(0.72, 1, depth);                   // foreshortened near the top
+    main.push([x, y]);
+  }
+  // Fine jaggies between the main zig-zag corners.
+  const pts = [main[0]];
+  for (let i = 1; i < main.length; i++) {
+    const [ax, ay] = main[i - 1], [bx, by] = main[i];
+    const len = Math.hypot(bx - ax, by - ay) || 1, n = Math.max(1, Math.round(len / 13));
+    for (let k = 1; k <= n; k++) {
+      const u = k / n, j = k < n ? (rng() - 0.5) * 3.4 : 0;
+      pts.push([ax + (bx - ax) * u - ((by - ay) / len) * j, ay + (by - ay) * u + ((bx - ax) / len) * j]);
+    }
+  }
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = cum[cum.length - 1];
+  // Side branches that splinter off while the crack races down.
+  const branches = [];
+  for (let b = 0; b < 9; b++) {
+    const idx = Math.floor(lerp(0.14, 0.9, (b + rng() * 0.8) / 9) * (pts.length - 1));
+    const [rx, ry] = pts[idx], [nx2, ny2] = pts[Math.min(idx + 1, pts.length - 1)];
+    const dir = Math.atan2(ny2 - ry, nx2 - rx) + (rng() < 0.5 ? -1 : 1) * (0.8 + 0.5 * rng());
+    const bp = [[rx, ry]], bc = [0];
+    let bx = rx, by = ry, a = dir, L = lerp(12, 30, idx / pts.length) * (0.8 + 0.5 * rng());
+    const nseg = 2 + Math.floor(rng() * 3);
+    for (let k = 0; k < nseg; k++) {
+      a += (rng() - 0.5) * 0.9;
+      bx += Math.cos(a) * L; by += Math.sin(a) * L;
+      bp.push([bx, by]); bc.push(bc[bc.length - 1] + L); L *= 0.72;
+    }
+    branches.push({ root: cum[idx], delay: 18 + 40 * rng(), pts: bp, cum: bc, total: bc[bc.length - 1] });
+  }
+  const pointAt = L => {
+    let i = 1; while (i < cum.length - 1 && cum[i] < L) i++;
+    const f = clamp((L - cum[i - 1]) / (cum[i] - cum[i - 1] || 1));
+    return [lerp(pts[i - 1][0], pts[i][0], f), lerp(pts[i - 1][1], pts[i][1], f)];
+  };
+  return { x0, y0, pts, cum, total, branches, pointAt };
+})();
+
+// How long the crack is at time t — creeping in bursts, then racing.
+const CRACK_T = (() => {
+  const rng = mulberry32(99);
+  const appear = cue('tap', 'tap3');
+  const creepA = sceneById.creep.start, creepB = sceneById.creep.end;
+  const raceA = sceneById.split.start, raceB = cue('split', 'pop') - 0.32;
+  const L0a = 16, L0b = 40, L1 = CRACK.total * 0.46;
+  const bursts = [];
+  for (let t = creepA + 0.35; t < creepB - 0.45; t += 0.65 + 0.85 * rng()) bursts.push({ t, w: 0.6 + 0.8 * rng(), d: 0.13 + 0.17 * rng() });
+  const wsum = bursts.reduce((a, b) => a + b.w, 0);
+  let acc = L0b;
+  for (const b of bursts) { b.from = acc; acc += (L1 - L0b) * b.w / wsum; b.to = acc; }
+  const EXP = 2.1;
+  function L(t) {
+    if (t < appear) return 0;
+    if (t < creepA) return lerp(0, L0a, easeOut3(clamp((t - appear) / 0.14))) + (L0b - L0a) * smooth(invLerp(appear + 0.3, creepA, t));
+    if (t < raceA) {
+      let v = L0b;
+      for (const b of bursts) { if (t < b.t) break; v = lerp(b.from, b.to, easeOut3(clamp((t - b.t) / b.d))); }
+      return v;
+    }
+    return lerp(L1, CRACK.total, Math.pow(invLerp(raceA, raceB, t), EXP));
+  }
+  // Crackle ticks while it races: one each time the tip passes another ~24px.
+  const fastTicks = [];
+  for (let l = L1 + 24; l < CRACK.total; l += 24) fastTicks.push(raceA + (raceB - raceA) * Math.pow((l - L1) / (CRACK.total - L1), 1 / EXP));
+  const lastBurst = t => { let lb = -9; for (const b of bursts) { if (b.t <= t) lb = b.t; else break; } return lb; };
+  return { L, bursts, fastTicks, appear, raceA, raceB, lastBurst };
+})();
+
+/* ===================== hatching engine (colored pencil) ================== */
+// A style is one pencil: colour, width, alpha. Strokes are split across a few
+// groups that are stroked separately so overlaps build up like real pencil.
+function styles(defs, groups = 5) {
+  return defs.map(([color, width, alpha]) => ({ color, width, alpha, g: Array.from({ length: groups }, () => []) }));
+}
+function drawStyles(g, list) {
+  for (const s of list) {
+    g.strokeStyle = s.color; g.lineWidth = s.width; g.globalAlpha = s.alpha;
+    for (const arr of s.g) {
+      if (!arr.length) continue;
+      g.beginPath();
+      for (let i = 0; i < arr.length; i += 4) { g.moveTo(arr[i], arr[i + 1]); g.lineTo(arr[i + 2], arr[i + 3]); }
+      g.stroke();
+    }
+  }
+  g.globalAlpha = 1;
+}
+function put(style, rng, cx, cy, ang, len) {
+  const ex = Math.cos(ang) * len * 0.5, ey = Math.sin(ang) * len * 0.5;
+  style.g[(rng() * style.g.length) | 0].push(cx - ex, cy - ey, cx + ex, cy + ey);
+}
+const any = (rng, arr) => arr[(rng() * arr.length) | 0];
+
+// Walk a jittered grid of short strokes across a box. `pick(x, y, rng)` returns
+// the pencil for that spot, or null to leave paper showing.
+function hatch(rng, box, o, pick) {
+  const { angle, gap, lenMin, lenMax, jitter = 0.12, spacing = 0.62, angleAt } = o;
+  const dx = Math.cos(angle), dy = Math.sin(angle), nx = -dy, ny = dx;
+  let n0 = Infinity, n1 = -Infinity, d0 = Infinity, d1 = -Infinity;
+  for (const [x, y] of [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]]) {
+    const pn = x * nx + y * ny, pd = x * dx + y * dy;
+    n0 = Math.min(n0, pn); n1 = Math.max(n1, pn); d0 = Math.min(d0, pd); d1 = Math.max(d1, pd);
+  }
+  for (let pn = n0 + rng() * gap; pn < n1; pn += gap * (0.8 + 0.4 * rng())) {
+    for (let pd = d0 - rng() * lenMax; pd < d1;) {
+      const len = lenMin + (lenMax - lenMin) * rng();
+      const off = (rng() - 0.5) * gap * 0.8;
+      const mx = (pd + len * 0.5) * dx + (pn + off) * nx;
+      const my = (pd + len * 0.5) * dy + (pn + off) * ny;
+      pd += len * (spacing + 0.45 * rng());
+      if (mx < box.x0 || mx > box.x1 || my < box.y0 || my > box.y1) continue;
+      const st = pick(mx, my, rng);
+      if (!st) continue;
+      put(st, rng, mx, my, (angleAt ? angleAt(mx, my) : angle) + (rng() - 0.5) * jitter, len);
+    }
+  }
+}
+function sketchLine(g, pts, rng, jit, color, width, alpha) {
+  g.strokeStyle = color; g.lineWidth = width; g.globalAlpha = alpha;
+  g.beginPath();
+  pts.forEach(([x, y], i) => { const X = x + (rng() - 0.5) * jit, Y = y + (rng() - 0.5) * jit; i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
+  g.stroke(); g.globalAlpha = 1;
+}
+
+// Pre-rendered boil passes. Each pass is a fresh random hatching of the layer;
+// the film shuffles between them eight times a second.
+class BoilLayer {
+  constructor(o) { Object.assign(this, o); this.variants = []; }
+  render(i) {
+    const { x0, y0, x1, y1 } = this.box, r = this.res;
+    const c = mkCanvas((x1 - x0) * r, (y1 - y0) * r), g = c.getContext('2d');
+    g.setTransform(r, 0, 0, r, -x0 * r, -y0 * r);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    this.build(g, mulberry32(hash3(this.seed, i, 17)), i);
+    this.variants[i] = c;
+  }
+  draw(g, tick) {
+    const b = this.box;
+    g.drawImage(this.variants[boilIndex(tick, this.variants.length, this.seed)], b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+  }
+}
+function boilIndex(tick, n, seed) {
+  if (n <= 1) return 0;
+  const a = hash3(tick, seed) % n, p = hash3(tick - 1, seed) % n;
+  return a === p ? (a + 1 + (hash3(tick, seed, 3) % (n - 1))) % n : a;
+}
+
+/* ---------------- lighting + stripe field shared by melon and flesh -------- */
+const LIGHT = (() => { const v = [-0.5, 0.74, 0.46], l = Math.hypot(...v); return v.map(c => c / l); })();
+const HALFV = (() => { const v = [LIGHT[0], LIGHT[1], LIGHT[2] + 1], l = Math.hypot(...v); return v.map(c => c / l); })();
+const STRIPE_P = TAU / 12;
+function ellField(E, x, y, F) {
+  const u = (x - E.cx) / E.a, v = (E.cy - y) / E.b, r2 = u * u + v * v;
+  if (r2 >= 1) return false;
+  const w = Math.sqrt(1 - r2);
+  let nx = u / E.a, ny = v / E.b, nz = w / E.b;
+  const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
+  F.u = u;
+  F.diff = Math.max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]);
+  F.spec = Math.pow(Math.max(0, nx * HALFV[0] + ny * HALFV[1] + nz * HALFV[2]), 36);
+  F.ring = Math.sqrt(Math.max(1e-6, 1 - u * u));
+  F.phi = Math.acos(clamp(v / F.ring, -1, 1));                    // 0 on the silhouette, pi/2 facing us
+  F.edgeDist = (1 - Math.sqrt(r2)) * E.b;
+  return true;
+}
+function stripeOf(F) {
+  const q = F.phi / STRIPE_P + 0.42, k = Math.floor(q), f = q - k, u = F.u;
+  const e1 = 0.06 + 0.075 * tri(u * 9.3 + k * 0.37) + 0.045 * vnoise(u * 27 + k * 3.1, k);
+  const e2 = 0.53 + 0.075 * tri(u * 7.9 + k * 0.61 + 0.5) + 0.045 * vnoise(u * 23 + k * 5.7, k + 50);
+  F.dark = f > e1 && f < e2;
+  F.edge = Math.min(Math.abs(f - e1), Math.abs(f - e2));
+}
+// Direction of the stripes (lines of constant phi) — used for cross-contour strokes.
+const contourAngle = (E, F) => Math.atan2(E.b * F.u * Math.cos(F.phi) / F.ring, E.a);
+
+/* ------------------------------ paper ----------------------------------- */
+function makePaper() {
+  const c = mkCanvas(W, H), g = c.getContext('2d'), rng = mulberry32(7);
+  g.fillStyle = '#f1e6cf'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 70; i++) {
+    const x = rng() * W, y = rng() * H, r = 80 + rng() * 260;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, rng() < 0.5 ? 'rgba(206,180,138,0.05)' : 'rgba(255,252,240,0.09)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r);
+  }
+  g.lineCap = 'round';
+  for (let pass = 0; pass < 2; pass++) {
+    g.strokeStyle = pass ? 'rgba(255,251,240,0.3)' : 'rgba(170,146,110,0.1)';
+    g.lineWidth = pass ? 1.2 : 0.9;
+    g.beginPath();
+    for (let i = 0; i < 280; i++) {
+      const x = rng() * W, y = rng() * H, a = rng() * TAU, l = 6 + rng() * 18;
+      g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + 0.6) * l * 0.5, y + Math.sin(a + 0.6) * l * 0.5, x + Math.cos(a) * l, y + Math.sin(a) * l);
+    }
+    g.stroke();
+  }
+  for (const [col, n] of [['rgba(120,95,60,0.10)', 7000], ['rgba(255,255,248,0.35)', 5000]]) {
+    g.fillStyle = col;
+    for (let i = 0; i < n; i++) g.fillRect(rng() * W, rng() * H, 1 + rng() * 1.2, 1 + rng() * 1.2);
+  }
+  return c;
+}
+// Paper tooth: pale specks laid over the drawing so pencil looks grainy.
+// It is nudged to a new offset on each boil tick, like a fresh sheet per drawing.
+function makeTooth() {
+  const c = mkCanvas(W + 64, H + 64), g = c.getContext('2d'), rng = mulberry32(11);
+  for (let lv = 0; lv < 6; lv++) {
+    g.fillStyle = `rgba(252,247,234,${0.12 + lv * 0.08})`;
+    for (let i = 0; i < 7000; i++) { const s = 0.8 + rng() * 1.5; g.fillRect(rng() * (W + 64), rng() * (H + 64), s, s * (0.5 + rng())); }
+  }
+  g.fillStyle = 'rgba(70,50,30,0.12)';
+  for (let i = 0; i < 9000; i++) g.fillRect(rng() * (W + 64), rng() * (H + 64), 1, 1);
+  return c;
+}
+function makeVignette(g) {
+  const gr = g.createRadialGradient(W / 2, H * 0.5, H * 0.28, W / 2, H * 0.5, H * 0.82);
+  gr.addColorStop(0, 'rgba(70,45,20,0)');
+  gr.addColorStop(1, 'rgba(70,45,20,0.17)');
+  return gr;
+}
+
+/* ------------------------------ sky -------------------------------------- */
+const SUN = { x: 238, y: 585, r: 100 };
+const CLOUDS = [
+  { x: 800, y: 395, base: 26, puffs: [[-128, 8, 56], [-66, -24, 70], [6, -38, 80], [80, -14, 64], [138, 10, 46], [-10, 12, 66]] },
+  { x: 872, y: 840, base: 14, puffs: [[-56, 4, 32], [-18, -14, 42], [28, -6, 36], [60, 6, 24]] },
+];
+const inCloud = (x, y) => CLOUDS.some(c => y < c.y + c.base && c.puffs.some(([px, py, r]) => (x - c.x - px) ** 2 + (y - c.y - py) ** 2 < r * r));
+const hillY = x => 1170 + 16 * Math.sin(x * 0.0062 + 1.2) + 7 * vnoise(x * 0.021, 9);
+
+function buildSky(g, rng) {
+  const box = { x0: 0, y0: 0, x1: W, y1: 1330 };
+  // Sky: loose, long strokes, cool at the top and warm near the horizon.
+  const sky = styles([['#a3bdc8', 2.8, 0.42], ['#b5cad1', 2.8, 0.42], ['#c9d8d6', 2.6, 0.4], ['#ecd3a0', 2.8, 0.4], ['#f2dcb4', 2.6, 0.4]], 6);
+  hatch(rng, box, { angle: -0.22, gap: 6.4, lenMin: 34, lenMax: 70, jitter: 0.07, spacing: 0.8 }, (x, y, r) => {
+    if (y > fleshTopY(x) - 2 || inCloud(x, y) || Math.hypot(x - SUN.x, y - SUN.y) < SUN.r + 36) return null;
+    const top = 1 - smooth(clamp(y / 1250));
+    if (r() > 0.05 + 0.62 * top * top) return null;
+    const warm = smooth(invLerp(560, 1150, y + (r() - 0.5) * 260));
+    return sky[warm > 0.5 ? 3 + ((r() * 2) | 0) : (r() * 3) | 0];
+  });
+  // Distant field behind the melon.
+  const field = styles([['#a3a86e', 2.1, 0.8], ['#8f9a5c', 2.1, 0.8], ['#b8b582', 2.0, 0.75], ['#7d8a4d', 1.8, 0.7]]);
+  hatch(rng, { x0: 0, y0: 1130, x1: W, y1: 1330 }, { angle: -0.62, gap: 5.2, lenMin: 9, lenMax: 16 }, (x, y, r) => {
+    const hy = hillY(x); if (y < hy || y > fleshTopY(x) - 2) return null;
+    return field[y - hy < 12 && r() < 0.5 ? 3 : (r() * 3) | 0];
+  });
+  drawStyles(g, sky); drawStyles(g, field);
+  let hill = [];
+  for (let x = -10; x <= W + 24; x += 14) {
+    if (hillY(x) < fleshTopY(x) - 4 && x <= W + 10) hill.push([x, hillY(x)]);
+    else { if (hill.length > 1) sketchLine(g, hill, rng, 1.4, '#6f7c43', 2, 0.7); hill = []; }
+  }
+  // Grass tufts at the far edges.
+  g.strokeStyle = '#5d6b34'; g.lineWidth = 2; g.beginPath();
+  for (let i = 0; i < 46; i++) {
+    const x = i < 23 ? rng() * 150 : W - rng() * 150, y = hillY(x) + 4 + rng() * 14, h = 16 + rng() * 34, lean = (rng() - 0.5) * 18;
+    g.moveTo(x, y); g.quadraticCurveTo(x + lean * 0.3, y - h * 0.6, x + lean, y - h);
+  }
+  g.stroke();
+  // Sun: dense warm hatching, a sketchy rim and a halo of short rays.
+  const sun = styles([['#f4c95d', 2.2, 0.9], ['#efb84a', 2.2, 0.85], ['#f7da86', 2.0, 0.9], ['#e9a23d', 1.8, 0.7]]);
+  const sb = { x0: SUN.x - SUN.r, y0: SUN.y - SUN.r, x1: SUN.x + SUN.r, y1: SUN.y + SUN.r };
+  hatch(rng, sb, { angle: 0.85, gap: 4.2, lenMin: 8, lenMax: 15 }, (x, y, r) => {
+    const d = Math.hypot(x - SUN.x, y - SUN.y) / SUN.r; if (d > 0.97) return null;
+    const lit = (SUN.x - x + SUN.y - y) / (2 * SUN.r);
+    return sun[d > 0.8 && r() < 0.5 ? 3 : lit > 0.15 ? 2 : (r() * 2) | 0];
+  });
+  hatch(rng, sb, { angle: -0.5, gap: 6, lenMin: 7, lenMax: 12 }, (x, y, r) => (Math.hypot(x - SUN.x, y - SUN.y) < SUN.r * 0.95 && r() < 0.35 ? sun[1] : null));
+  drawStyles(g, sun);
+  const ring = []; for (let a = 0; a <= TAU + 0.3; a += 0.12) ring.push([SUN.x + Math.cos(a) * SUN.r, SUN.y + Math.sin(a) * SUN.r]);
+  sketchLine(g, ring, rng, 2.2, '#dd9636', 2.4, 0.85);
+  g.strokeStyle = '#efc464'; g.lineWidth = 2.2; g.globalAlpha = 0.8; g.beginPath();
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * TAU + (rng() - 0.5) * 0.12, r0 = SUN.r + 16 + rng() * 8, r1 = r0 + 16 + rng() * 22;
+    g.moveTo(SUN.x + Math.cos(a) * r0, SUN.y + Math.sin(a) * r0); g.lineTo(SUN.x + Math.cos(a) * r1, SUN.y + Math.sin(a) * r1);
+  }
+  g.stroke(); g.globalAlpha = 1;
+  // Clouds: paper-white shapes with scalloped pencil edges and shaded bellies.
+  const cshade = styles([['#b8c7c6', 2.0, 0.7], ['#c9d4cf', 2.0, 0.6]]);
+  for (const c of CLOUDS) {
+    hatch(rng, { x0: c.x - 200, y0: c.y - 130, x1: c.x + 200, y1: c.y + c.base }, { angle: -0.36, gap: 5, lenMin: 8, lenMax: 16 }, (x, y, r) => {
+      if (!inCloud(x, y)) return null;
+      return r() < invLerp(c.y - 20, c.y + c.base, y) * 0.9 ? cshade[(r() * 2) | 0] : null;
+    });
+  }
+  drawStyles(g, cshade);
+  g.strokeStyle = '#8fa6a8'; g.lineWidth = 2.3; g.lineCap = 'round';
+  for (const c of CLOUDS) {
+    g.beginPath();
+    for (const [px, py, r] of c.puffs) {
+      const cx = c.x + px, cy = c.y + py;
+      for (let a = Math.PI * 1.02; a < Math.PI * 2 - 0.02; a += 0.14) {
+        const x = cx + Math.cos(a) * r + (rng() - 0.5) * 1.6, y = cy + Math.sin(a) * r + (rng() - 0.5) * 1.6;
+        if (inCloud(x + Math.cos(a) * 4, y + Math.sin(a) * 4)) { g.moveTo(x, y); continue; }
+        a === Math.PI * 1.02 ? g.moveTo(x, y) : g.lineTo(x, y);
+      }
+    }
+    g.stroke();
+    const xs = c.puffs.map(p => c.x + p[0]);
+    sketchLine(g, [[Math.min(...xs) - 30, c.y + c.base], [Math.max(...xs) + 26, c.y + c.base]], rng, 1.5, '#8fa6a8', 2, 0.7);
+  }
+}
+
+/* ------------------------------ melon rind ------------------------------- */
+const MEL_BOX = { x0: -60, y0: 1020, x1: 1140, y1: 2000 };
+function buildMelon(g, rng) {
+  const F = {}, E = MELON;
+  g.save();
+  g.beginPath(); g.ellipse(E.cx, E.cy, E.a, E.b, 0, 0, TAU); g.clip();
+  const P = {
+    lightHi: styles([['#c3d98a', 2.4, 0.85], ['#b0cd73', 2.4, 0.85], ['#d9e6a6', 2.2, 0.85], ['#a5c466', 2.3, 0.85]]),
+    lightMid: styles([['#9dbf62', 2.4, 0.85], ['#8cb257', 2.4, 0.85], ['#abc970', 2.3, 0.85], ['#7fa64d', 2.3, 0.85]]),
+    lightLo: styles([['#739b45', 2.4, 0.85], ['#66903f', 2.4, 0.85], ['#7ea44f', 2.3, 0.85], ['#5a833a', 2.3, 0.85]]),
+    darkHi: styles([['#4b8a3a', 2.4, 0.88], ['#3f7c33', 2.4, 0.88], ['#58964a', 2.3, 0.85], ['#3a722f', 2.4, 0.88]]),
+    darkMid: styles([['#306a2b', 2.4, 0.88], ['#2a5f27', 2.4, 0.88], ['#3a7331', 2.3, 0.88], ['#244f22', 2.4, 0.88]]),
+    darkLo: styles([['#1f4a21', 2.4, 0.9], ['#1a3f1d', 2.4, 0.9], ['#27552a', 2.3, 0.9], ['#15361a', 2.4, 0.9]]),
+    sheen: styles([['#eef0c8', 2.2, 0.85], ['#e3ebb8', 2.2, 0.85], ['#f7f2d8', 2.0, 0.8]]),
+    cross: styles([['#163a1c', 1.9, 0.72], ['#1d4521', 1.9, 0.72], ['#23502a', 1.8, 0.7]]),
+    crossLt: styles([['#5f8a3e', 1.9, 0.6], ['#557f37', 1.9, 0.6]]),
+    contour: styles([['#24552a', 2.0, 0.6], ['#1c4621', 2.0, 0.6]]),
+    vein: styles([['#6d9646', 1.8, 0.55], ['#5e8a3d', 1.8, 0.55]]),
+  };
+  const box = MEL_BOX;
+  // 1. Base layer: diagonal strokes coloured by stripe + light.
+  hatch(rng, box, { angle: -0.93, gap: 5.2, lenMin: 11, lenMax: 21, jitter: 0.16 }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    stripeOf(F);
+    let tone = 0.12 + 0.95 * F.diff + (r() - 0.5) * 0.22;
+    if (F.edgeDist < 16) tone -= 0.1;
+    if (F.spec > 0.12 && r() < F.spec * 0.6) return r() < 0.4 ? null : any(r, P.sheen);
+    if (r() > 0.94) return null;
+    if (F.dark) {
+      if (F.edge < 0.02 && r() < 0.55) return any(r, P.darkLo);
+      return any(r, tone > 0.74 ? P.darkHi : tone > 0.5 ? P.darkMid : P.darkLo);
+    }
+    return any(r, tone > 0.74 ? P.lightHi : tone > 0.5 ? P.lightMid : P.lightLo);
+  });
+  // 2. Cross-hatch into shadow and the dark stripes.
+  hatch(rng, box, { angle: 0.62, gap: 6.4, lenMin: 9, lenMax: 17, jitter: 0.18 }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    stripeOf(F);
+    const shade = 1 - clamp(0.12 + 0.95 * F.diff);
+    const p = F.dark ? 0.2 + 0.7 * shade : Math.max(0, shade - 0.3) * 1.1;
+    if (r() > p - F.spec) return null;
+    return any(r, F.dark ? P.cross : P.crossLt);
+  });
+  // 3. Cross-contour scribbles that follow the stripes around the melon.
+  hatch(rng, box, {
+    angle: 0, gap: 8, lenMin: 18, lenMax: 32, jitter: 0.08,
+    angleAt: (x, y) => (ellField(E, x, y, F) ? contourAngle(E, F) : 0),
+  }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    stripeOf(F);
+    if (F.dark) return r() < 0.32 - F.spec ? any(r, P.contour) : null;
+    return r() < 0.06 ? any(r, P.vein) : null;
+  });
+  for (const k of ['lightLo', 'lightMid', 'lightHi', 'darkLo', 'darkMid', 'darkHi', 'sheen', 'crossLt', 'cross', 'vein', 'contour']) drawStyles(g, P[k]);
+  g.restore();
+  // Silhouette: a glossy rim-light just inside, then a double pencil contour.
+  const top = [], rim = [];
+  for (let x = box.x0; x <= box.x1; x += 12) { top.push([x, ellipseY(E, x)]); rim.push([x, ellipseY(E, x) + 7]); }
+  sketchLine(g, rim, rng, 1.6, '#e2ecb2', 2.2, 0.55);
+  sketchLine(g, top, rng, 1.4, '#16301a', 3.4, 0.9);
+  sketchLine(g, top, rng, 2.2, '#1f3d1f', 1.6, 0.6);
+}
+
+/* ------------------------------ melon flesh ------------------------------ */
+const RED_BOX = { x0: 40, y0: 1090, x1: 1140, y1: 1930 };
+const SEEDS = (() => {
+  const rng = mulberry32(31337), out = [];
+  for (let i = 0; i < 90 && out.length < 58; i++) {
+    const u = -0.7 + 1.4 * rng(), ring = Math.sqrt(1 - u * u);
+    const phi = rng() < 0.16 ? 0.14 + 0.1 * rng() : 0.5 + 0.8 * rng();
+    const x = FLESH.cx + u * FLESH.a, y = FLESH.cy - FLESH.b * ring * Math.cos(phi);
+    if (y < fleshTopY(x) + 22 || out.some(s => Math.hypot(s.x - x, s.y - y) < 62)) continue;
+    const ang = Math.atan2(FLESH.cy - y, FLESH.cx - x) + (rng() - 0.5) * 0.5;
+    out.push({ x, y, ang, len: 31 + 7 * rng(), wid: (17 + 4 * rng()) * lerp(0.6, 1, Math.sin(phi)) });
+  }
+  return out;
+})();
+function seedPath(g, len, wid) {
+  const L = len / 2, Wd = wid / 2;
+  g.moveTo(L, 0);
+  g.bezierCurveTo(L * 0.3, -Wd * 0.95, -L * 0.95, -Wd * 1.1, -L, 0);
+  g.bezierCurveTo(-L * 0.95, Wd * 1.1, L * 0.3, Wd * 0.95, L, 0);
+}
+function drawSeed(g, s, rng, scale = 1) {
+  g.save();
+  g.translate(s.x, s.y); g.rotate(s.ang); g.scale(scale, scale);
+  g.beginPath(); seedPath(g, s.len, s.wid);
+  g.globalAlpha = 0.95; g.fillStyle = '#2a1712'; g.fill();
+  g.save(); g.clip();
+  g.strokeStyle = '#120806'; g.lineWidth = 1.6; g.globalAlpha = 0.8; g.beginPath();
+  for (let k = -3; k <= 3; k++) { const o = k * 3 + (rng() - 0.5) * 1.5; g.moveTo(-s.len / 2 + o, s.wid / 2); g.lineTo(-s.len / 2 + o + 7, -s.wid / 2); }
+  g.stroke();
+  g.restore();
+  g.globalAlpha = 1; g.strokeStyle = '#140a07'; g.lineWidth = 1.7; g.beginPath(); seedPath(g, s.len + (rng() - 0.5), s.wid + (rng() - 0.5)); g.stroke();
+  g.strokeStyle = '#b28c72'; g.lineWidth = 1.5; g.globalAlpha = 0.85; g.beginPath();
+  g.moveTo(-s.len * 0.3, -s.wid * 0.26); g.quadraticCurveTo(0, -s.wid * 0.36, s.len * 0.2, -s.wid * 0.2); g.stroke();
+  g.fillStyle = '#fff5ea'; g.globalAlpha = 0.9; g.beginPath(); g.arc(-s.len * 0.18, -s.wid * 0.18, 1.3, 0, TAU); g.fill();
+  g.restore(); g.globalAlpha = 1;
+}
+function fleshClip(g) {
+  g.beginPath();
+  for (let x = RED_BOX.x0 - 10; x <= RED_BOX.x1 + 10; x += 8) (x === RED_BOX.x0 - 10 ? g.moveTo : g.lineTo).call(g, x, fleshTopY(x));
+  g.lineTo(RED_BOX.x1 + 10, 2100); g.lineTo(RED_BOX.x0 - 10, 2100); g.closePath();
+}
+function buildFlesh(g, rng) {
+  const F = {}, E = FLESH;
+  g.save();
+  fleshClip(g); g.clip();
+  const P = {
+    hi: styles([['#ef6f5d', 2.4, 0.88], ['#f28470', 2.4, 0.88], ['#e8604f', 2.4, 0.88], ['#f59a85', 2.2, 0.85]]),
+    mid: styles([['#dd4b3f', 2.4, 0.88], ['#d6433a', 2.4, 0.88], ['#e35a4a', 2.4, 0.88], ['#cf3d37', 2.4, 0.88]]),
+    lo: styles([['#b8323a', 2.4, 0.9], ['#a92c35', 2.4, 0.9], ['#c23a3c', 2.4, 0.9], ['#962532', 2.4, 0.9]]),
+    pale: styles([['#f7b3a0', 2.2, 0.85], ['#f9c7b6', 2.2, 0.85], ['#fbd9cc', 2.0, 0.8]]),
+    fiber: styles([['#b02c35', 1.8, 0.5], ['#c03a3d', 1.8, 0.5], ['#9d2631', 1.8, 0.5]]),
+    cross: styles([['#8f2230', 1.8, 0.65], ['#a0293a', 1.8, 0.65]]),
+    spark: styles([['#fff3ea', 1.8, 0.9], ['#ffe4d8', 1.8, 0.85]]),
+  };
+  const box = RED_BOX;
+  hatch(rng, box, { angle: -0.93, gap: 4.6, lenMin: 10, lenMax: 20, jitter: 0.18 }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    const depth = y - fleshTopY(x);
+    let tone = 0.12 + 0.95 * F.diff + (r() - 0.5) * 0.24;
+    if (F.spec > 0.12 && r() < F.spec * 0.55) return r() < 0.4 ? null : any(r, P.pale);
+    if (r() > 0.95) return null;
+    if (depth < 8 && r() < 0.5) return any(r, P.pale);
+    return any(r, tone > 0.74 ? P.hi : tone > 0.5 ? P.mid : P.lo);
+  });
+  // Juicy fibres radiating from the melon's core.
+  hatch(rng, box, { angle: 0, gap: 7, lenMin: 14, lenMax: 30, jitter: 0.12, angleAt: (x, y) => Math.atan2(y - E.cy, x - E.cx) }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    return r() < 0.16 ? any(r, P.fiber) : null;
+  });
+  hatch(rng, box, { angle: 0.6, gap: 6.6, lenMin: 8, lenMax: 16, jitter: 0.2 }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    return r() < Math.max(0, 0.62 - F.diff) * 0.9 ? any(r, P.cross) : null;
+  });
+  // Crystalline sparkle.
+  hatch(rng, box, { angle: -0.6, gap: 9, lenMin: 3, lenMax: 6, jitter: 1.2 }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    return r() < 0.05 + F.spec * 0.4 ? any(r, P.spark) : null;
+  });
+  for (const k of ['lo', 'mid', 'hi', 'pale', 'fiber', 'cross', 'spark']) drawStyles(g, P[k]);
+  for (const s of SEEDS) drawSeed(g, s, rng);
+  g.restore();
+  const top = [], rim = [];
+  for (let x = box.x0; x <= box.x1; x += 10) { top.push([x, fleshTopY(x)]); rim.push([x, fleshTopY(x) + 6]); }
+  sketchLine(g, rim, rng, 1.6, '#fbd0c2', 2.2, 0.6);
+  sketchLine(g, top, rng, 1.4, '#7d1f26', 3.0, 0.9);
+  // Juice beads along the broken surface.
+  g.fillStyle = '#f4a291';
+  for (let i = 0; i < 24; i++) {
+    const x = box.x0 + rng() * (box.x1 - box.x0), y = fleshTopY(x) + 2;
+    g.globalAlpha = 0.8; g.beginPath(); g.ellipse(x, y, 2.5 + rng() * 2.5, 2 + rng() * 1.5, 0, 0, TAU); g.fill();
+  }
+  g.globalAlpha = 1;
+}
+
+/* ================================ the ant ================================= */
+// Local units, facing +x, +y down, origin at the thorax (mesosoma) centre.
+const ANT = {
+  scale: 1.15,
+  h: 40,                    // thorax height above the ground
+  stride: 64,               // body travel per gait cycle
+  swing: 0.42,              // fraction of a cycle each foot spends in the air
+  lift: 13,                 // swing height
+  shapes: {
+    gaster: [[-40, -9], [-50, -18], [-64, -22], [-80, -20], [-93, -12], [-100, 0], [-96, 13], [-84, 21], [-66, 23], [-50, 18], [-41, 8]],
+    petiole: [[-26, -1], [-29, -11], [-34, -14], [-38, -6], [-37, 4], [-31, 6]],
+    thorax: [[29, -3], [25, -12], [15, -16], [3, -14], [-6, -9], [-14, -11], [-24, -8], [-29, 0], [-24, 8], [-8, 10], [10, 10], [24, 6]],
+    head: [[31, -8], [36, -18], [47, -23], [59, -20], [67, -11], [70, -1], [66, 8], [56, 12], [43, 11], [34, 4]],
+  },
+  neck: [30, -3], waist: [-27, 1], antBase: [55, -18],
+  scape: 25, funic: 33,
+  legs: [
+    { name: 'L1', hip: [17, 7], coxa: 6, femur: 31, tibia: 38, tarsus: 16, rest: 68, dir: 1, near: true, grp: 0 },
+    { name: 'L2', hip: [3, 9], coxa: 6, femur: 28, tibia: 36, tarsus: 15, rest: -18, dir: -0.55, near: true, grp: 1 },
+    { name: 'L3', hip: [-13, 7], coxa: 7, femur: 34, tibia: 45, tarsus: 17, rest: -74, dir: -1, near: true, grp: 0 },
+    { name: 'R1', hip: [19, 4], coxa: 6, femur: 31, tibia: 38, tarsus: 16, rest: 76, dir: 1, near: false, grp: 1 },
+    { name: 'R2', hip: [5, 6], coxa: 6, femur: 28, tibia: 36, tarsus: 15, rest: -6, dir: -0.55, near: false, grp: 0 },
+    { name: 'R3', hip: [-11, 4], coxa: 7, femur: 34, tibia: 45, tarsus: 17, rest: -62, dir: -1, near: false, grp: 1 },
+  ],
+};
+const SC = ANT.scale, STRIDE = ANT.stride * SC, HALF_STRIDE = STRIDE / 2;
+
+// Stateless tripod gait. Foot positions depend only on how far the body has
+// travelled (D), so feet never slide and walking backwards just works.
+// Stops are placed on multiples of half a stride from Dref, where all six feet are down.
+function footPlan(leg, D, Dref) {
+  const SW = ANT.swing, ph0 = 0.46 + (leg.grp ? 0.5 : 0);
+  const q = (D - Dref) / STRIDE + ph0, k = Math.floor(q), f = q - k;
+  const R = leg.rest * SC;
+  const plant = kk => Dref + (kk + SW - ph0) * STRIDE + R + STRIDE * (1 - SW) / 2;
+  if (f >= SW) return { s: plant(k), lift: 0, sw: 0 };
+  const u = f / SW;
+  return { s: lerp(plant(k - 1), plant(k), smooth(u)), lift: Math.sin(Math.PI * u) * ANT.lift * SC, sw: u };
+}
+function rampDist(t, T, ra, rd) {                    // distance covered at unit cruise speed with accel/decel ramps
+  if (t <= 0) return 0;
+  if (t >= T) return T - ra / 2 - rd / 2;
+  let d = 0;
+  if (ra > 0) { const t1 = Math.min(t, ra); d += t1 * t1 / (2 * ra); if (t <= ra) return d; }
+  d += Math.min(t, T - rd) - ra;
+  if (t <= T - rd) return d;
+  const u = t - (T - rd); return d + u - u * u / (2 * rd);
+}
+function moveD(moves, t, D0) {
+  let D = D0;
+  for (const m of moves) {
+    if (t < m.t0) break;
+    const T = m.t1 - m.t0;
+    D = m.from + (m.to - m.from) * rampDist(t - m.t0, T, m.ra, m.rd) / rampDist(T, T, m.ra, m.rd);
+  }
+  return D;
+}
+function catmullClosed(P, seg) {
+  const out = [], n = P.length;
+  for (let i = 0; i < n; i++) {
+    const p0 = P[(i - 1 + n) % n], p1 = P[i], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
+    for (let k = 0; k < seg; k++) {
+      const t = k / seg, t2 = t * t, t3 = t2 * t;
+      out.push([0, 1].map(j => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3)));
+    }
+  }
+  return out;
+}
+function inPoly(P, x, y) {
+  let c = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    if ((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c;
+  }
+  return c;
+}
+const polyPath = (g, P) => { g.moveTo(P[0][0], P[0][1]); for (let i = 1; i < P.length; i++) g.lineTo(P[i][0], P[i][1]); g.closePath(); };
+
+// Hatched body parts, regenerated on every boil tick (cached per tick).
+const partCache = new Map();
+function partData(name, tick) {
+  const key = name + tick;
+  if (partCache.has(key)) return partCache.get(key);
+  const rng = mulberry32(hash3(tick, name.charCodeAt(0) * 31 + name.length, 71));
+  const src = ANT.shapes[name];
+  const poly = catmullClosed(src.map(([x, y]) => [x + (rng() - 0.5) * 1.3, y + (rng() - 0.5) * 1.3]), 4);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const [x, y] of poly) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hw = (x1 - x0) / 2, hh = (y1 - y0) / 2;
+  const S = styles([['#1b0e08', 1.35, 0.85], ['#4d2e1e', 1.35, 0.85], ['#86593a', 1.3, 0.9], ['#c9966a', 1.5, 0.9]], 2);
+  const light = (x, y) => 0.6 * (cy - y) / hh + 0.4 * (cx - x) / hw;
+  const box = { x0, y0, x1, y1 };
+  hatch(rng, box, { angle: -0.95, gap: 2.5, lenMin: 4, lenMax: 8, jitter: 0.25, spacing: 0.7 }, (x, y, r) => {
+    if (!inPoly(poly, x, y)) return null;
+    const l = light(x, y) + (r() - 0.5) * 0.5;
+    return S[l > 0.6 ? 2 : l > -0.15 ? 1 : 0];
+  });
+  hatch(rng, box, { angle: 0.7, gap: 3, lenMin: 3, lenMax: 7, jitter: 0.3 }, (x, y, r) => (inPoly(poly, x, y) && light(x, y) < 0.05 && r() < 0.85 ? S[0] : null));
+  // Glossy highlight strokes along the upper-left shoulder of the part.
+  const hl = S[3].g[0];
+  for (let i = 0; i < 4; i++) {
+    const a = -2.35 + i * 0.22 + (rng() - 0.5) * 0.1, r0 = 0.62 + rng() * 0.08;
+    const px = cx + Math.cos(a) * hw * r0, py = cy + Math.sin(a) * hh * r0, ta = a + Math.PI / 2;
+    hl.push(px - Math.cos(ta) * 2.4, py - Math.sin(ta) * 2.4, px + Math.cos(ta) * 2.4, py + Math.sin(ta) * 2.4);
+  }
+  const d = { poly, S, spec: [cx - hw * 0.42, cy - hh * 0.5] };
+  partCache.set(key, d);
+  if (partCache.size > 48) partCache.delete(partCache.keys().next().value);
+  return d;
+}
+function drawPart(g, name, tick) {
+  const d = partData(name, tick);
+  g.beginPath(); polyPath(g, d.poly);
+  g.fillStyle = '#3c2418'; g.globalAlpha = 0.8; g.fill();
+  g.save(); g.clip(); drawStyles(g, d.S); g.restore();
+  g.globalAlpha = 1; g.strokeStyle = '#150a05'; g.lineWidth = 1.9;
+  g.beginPath(); polyPath(g, d.poly); g.stroke();
+  g.fillStyle = '#f6e1c6'; g.globalAlpha = 0.85;
+  g.beginPath(); g.ellipse(d.spec[0], d.spec[1], 2.3, 1.5, -0.5, 0, TAU); g.fill();
+  g.globalAlpha = 1;
+}
+function ik2(ax, ay, bx, by, l1, l2, upx, upy) {
+  const dx = bx - ax, dy = by - ay, d0 = Math.hypot(dx, dy) || 1e-6;
+  const d = clamp(d0, Math.abs(l1 - l2) + 0.01, l1 + l2 - 0.01);
+  const ux = dx / d0, uy = dy / d0;
+  const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+  let nx = -uy, ny = ux;
+  if (nx * upx + ny * upy < 0) { nx = -nx; ny = -ny; }
+  return [ax + ux * a + nx * h, ay + uy * a + ny * h];
+}
+
+/* ============================ choreography ================================ */
+const PLAN = (() => {
+  const T = {
+    pause: cue('walk', 'pause'), resume: cue('walk', 'resume'), arrive: cue('walk', 'arrive'),
+    sniff: cue('tap', 'sniff'), a1: cue('tap', 'antenna1'), a2: cue('tap', 'antenna2'), lift: cue('tap', 'lift'),
+    tap1: cue('tap', 'tap1'), tap2: cue('tap', 'tap2'), tap3: cue('tap', 'tap3'), look: cue('tap', 'look'),
+    edge: cue('creep', 'edge'), lean: cue('creep', 'lean'), glance: cue('creep', 'glance'),
+    back: cue('split', 'backAway'), pop: cue('split', 'pop'), land: cue('split', 'land'), grab: cue('split', 'grab'),
+    feast: sceneById.feast.start, fade: cue('feast', 'fade'), end: FILM_END,
+    creepEnd: sceneById.creep.end, splitStart: sceneById.split.start,
+  };
+  const Dref = MELON_SURF.sAtX(CRACK.x0 - 104);           // tapping foot reaches the crack's origin
+  const Dpause = Dref - 7 * HALF_STRIDE;
+  const Dstart = MELON_SURF.sAtX(-120);
+  const moves = [
+    { t0: 0, t1: T.pause, from: Dstart, to: Dpause, ra: 0, rd: 0.45 },
+    { t0: T.resume, t1: T.arrive, from: Dpause, to: Dref, ra: 0.35, rd: 0.55 },
+    { t0: T.tap3 + 0.05, t1: T.tap3 + 0.4, from: Dref, to: Dref - HALF_STRIDE, ra: 0.1, rd: 0.15 },
+    { t0: T.edge, t1: T.edge + 1.4, from: Dref - HALF_STRIDE, to: Dref + HALF_STRIDE, ra: 0.35, rd: 0.45 },
+    { t0: T.back, t1: T.back + 0.8, from: Dref + HALF_STRIDE, to: Dref - 2 * HALF_STRIDE, ra: 0.15, rd: 0.3 },
+  ];
+  const DlandR = FLESH_SURF.sAtX(CRACK.x0 + 28);
+  const redMoves = [{ t0: T.grab - 0.95, t1: T.grab - 0.12, from: DlandR, to: DlandR + 2 * HALF_STRIDE, ra: 0.25, rd: 0.3 }];
+  const seedS = DlandR + 2 * HALF_STRIDE + 92;
+  const sp = FLESH_SURF.at(seedS);
+  const seedRest = { x: sp.x + sp.nx * 6, y: sp.y + sp.ny * 6, ang: sp.ang - 0.55, len: 40, wid: 24 };
+  // Bites: little bursts of nibbling once it has sat down.
+  const bites = [];
+  { const rng = mulberry32(5150); let t = T.grab + 1.05; while (t < T.end - 0.5) { const n = 2 + ((rng() * 2) | 0); for (let i = 0; i < n; i++) bites.push(t + i * 0.19); t += n * 0.19 + 0.55 + 0.6 * rng(); } }
+  const blinks = [2.2, 6.1, 9.7, 13.2, 20.6, 26.4, 29.1, 36.1, 40.3, 43.4];
+  return { T, Dref, DlandR, moves, redMoves, seedRest, bites, blinks };
+})();
+
+// Channels for the ant's pose on the melon (before the pop).
+const CH = (() => {
+  const T = PLAN.T;
+  return {
+    pitch: track([[0, 0], [T.pause, 0], [T.pause + 0.25, -0.06], [T.resume, -0.06], [T.resume + 0.3, 0], [T.arrive, 0],
+      [T.sniff, 0.1], [T.a2 + 0.2, 0.1], [T.lift, 0.03], [T.tap3, 0.08], [T.tap3 + 0.1, -0.16], [T.tap3 + 0.5, 0], [T.look, 0.14],
+      [T.edge, 0.1], [T.edge + 1.4, 0.12], [T.lean, 0.14], [T.lean + 1.2, 0.3], [T.glance, 0.3], [T.glance + 0.3, 0.1],
+      [T.glance + 1.4, 0.1], [T.glance + 1.9, 0.32], [T.back - 0.2, 0.32], [T.back, 0], [T.back + 0.3, -0.12], [T.pop, -0.1]]),
+    head: track([[0, 0.06], [T.pause, 0.06], [T.pause + 0.3, -0.3], [T.resume, -0.26], [T.resume + 0.3, 0.05], [T.arrive, 0.05],
+      [T.sniff, 0.34], [T.lift, 0.24], [T.tap3, 0.3], [T.tap3 + 0.1, -0.25], [T.tap3 + 0.6, -0.1], [T.look, 0.44],
+      [T.edge, 0.3], [T.lean, 0.36], [T.lean + 1.2, 0.5], [T.glance, 0.54], [T.glance + 0.25, -0.34],
+      [T.glance + 1.4, -0.3], [T.glance + 1.9, 0.62], [T.back - 0.3, 0.7], [T.back, -0.2], [T.pop, -0.25]]),
+    crouch: track([[0, 1], [T.tap3, 1], [T.tap3 + 0.12, 1.12], [T.tap3 + 0.6, 1], [T.lean, 1], [T.lean + 1.2, 0.84],
+      [T.glance, 0.84], [T.glance + 0.3, 0.96], [T.glance + 1.4, 0.96], [T.glance + 1.9, 0.84], [T.back - 0.2, 0.84], [T.back, 1.06], [T.pop, 1.06]]),
+    gaster: track([[0, 0], [T.lean, 0], [T.lean + 1.2, -0.1], [T.back - 0.2, -0.1], [T.back, 0.22], [T.pop, 0.22]]),
+    sA: track([[0, -1.2], [T.pause, -1.2], [T.pause + 0.25, -1.62], [T.resume, -1.55], [T.resume + 0.3, -1.2], [T.arrive, -1.15],
+      [T.sniff, -0.95], [T.lift, -1.0], [T.tap3, -0.95], [T.tap3 + 0.08, -1.75], [T.tap3 + 0.7, -1.6], [T.look, -0.85],
+      [T.lean + 1.0, -0.78], [T.glance, -0.78], [T.glance + 0.25, -1.5], [T.glance + 1.4, -1.45], [T.glance + 1.9, -0.8],
+      [T.back - 0.2, -0.8], [T.back, -1.75], [T.pop, -1.8]]),
+    fA: track([[0, -0.3], [T.pause, -0.3], [T.pause + 0.25, -1.05], [T.resume, -0.95], [T.resume + 0.3, -0.3], [T.arrive, -0.2],
+      [T.sniff, 0.3], [T.lift, 0.15], [T.tap3, 0.25], [T.tap3 + 0.08, -1.55], [T.tap3 + 0.7, -1.2], [T.look, 0.45],
+      [T.lean + 1.0, 0.35], [T.glance, 0.35], [T.glance + 0.25, -0.5], [T.glance + 1.4, -0.45], [T.glance + 1.9, 0.4],
+      [T.back - 0.2, 0.4], [T.back, -1.3], [T.pop, -1.4]]),
+  };
+})();
+// Channels after landing on the red flesh.
+const CHR = (() => {
+  const T = PLAN.T;
+  return {
+    crouch: track([[T.land, 0.62], [T.land + 0.45, 1, easeOutBack]]),
+    pitch: track([[T.land, 0.12], [T.land + 0.5, 0], [T.grab - 0.25, 0.04], [T.grab, 0.13], [T.grab + 0.3, 0.05]]),
+    head: track([[T.land, 0.3], [T.land + 0.4, 0.1], [T.land + 1.3, 0.1], [T.land + 1.6, 0.4], [T.grab - 0.9, 0.2], [T.grab - 0.1, 0.8], [T.grab + 0.3, 0.45]]),
+    sA: track([[T.land, -0.5], [T.land + 0.9, -1.1], [T.land + 1.5, -1.35], [T.grab - 0.3, -1.1], [T.grab, -0.85], [T.grab + 0.8, -1.3]]),
+    fA: track([[T.land, 0.9], [T.land + 0.9, -0.1], [T.land + 1.5, -0.35], [T.grab - 0.3, 0.1], [T.grab, 0.55], [T.grab + 0.8, -0.2]]),
+    sit: t => smooth(invLerp(T.grab + 0.2, T.grab + 0.85, t)),
+  };
+})();
+const BLINK = t => PLAN.blinks.some(b => t > b && t < b + 0.13);
+function speedAt(moves, t, D0) { return (moveD(moves, t + 0.03, D0) - moveD(moves, t - 0.03, D0)) / 0.06; }
+
+// Antenna wiggle — a little independent life on top of the keyed poses.
+function antennae(t, sA, fA, excite, walkQ) {
+  const out = [];
+  for (let i = 0; i < 2; i++) {
+    const ph = i * 1.7;
+    out.push({
+      sA: sA + 0.07 * Math.sin(TAU * 0.8 * t + ph) * (1 + excite) + 0.08 * Math.sin(walkQ * TAU + ph),
+      fA: fA + (0.14 * Math.sin(TAU * 1.25 * t + ph * 1.3) + 0.06 * Math.sin(TAU * 3.3 * t + ph)) * (1 + 1.5 * excite) + 0.1 * Math.sin(walkQ * TAU + 1 + ph),
+    });
+  }
+  return out;
+}
+
+function antPose(t) {
+  const T = PLAN.T;
+  const pose = { legs: [], seed: null, blink: BLINK(t), shadow: 1 };
+  if (t < T.pop) {
+    const D = moveD(PLAN.moves, t, PLAN.moves[0].from);
+    const v = speedAt(PLAN.moves, t, PLAN.moves[0].from), spd = clamp(Math.abs(v) / 90);
+    const q = (D - PLAN.Dref) / STRIDE;
+    let head = CH.head(t), pitch = CH.pitch(t), sA = CH.sA(t), fA = CH.fA(t);
+    // Taps: body dips a touch with each strike.
+    for (const tk of [T.tap1, T.tap2, T.tap3]) pitch += 0.07 * pulse(t, tk, 0.08, 0.22);
+    pitch -= 0.06 * smooth(invLerp(T.lift, T.lift + 0.35, t)) * (1 - smooth(invLerp(T.tap3, T.tap3 + 0.3, t)));
+    // Sniffing the air during the pause: two quick flicks, on the music's two notes.
+    fA -= 0.4 * (pulse(t, T.pause + 0.45, 0.06, 0.12) + pulse(t, T.pause + 0.6, 0.06, 0.12));
+    // Head follows the crack tip down while it peers over.
+    head += 0.15 * clamp(CRACK_T.L(t) / (CRACK.total * 0.46)) * smooth(invLerp(T.look, T.lean + 1.2, t)) * (1 - smooth(invLerp(T.back - 0.3, T.back, t)));
+    const excite = smooth(invLerp(T.back - 0.1, T.back + 0.3, t)) + pulse(t, T.tap3 + 0.3, 0.2, 0.6);
+    const shiver = smooth(invLerp(T.back + 0.8, T.pop, t));
+    groundPose(pose, MELON_SURF, D, PLAN.Dref, {
+      crouch: CH.crouch(t) + 0.025 * shiver * Math.sin(t * 115), pitch: pitch + 0.02 * Math.sin(q * 2 * TAU + 1) * spd + 0.02 * shiver * Math.sin(t * 97),
+      head: head + 0.03 * Math.sin(q * 2 * TAU + 0.5) * spd, gaster: CH.gaster(t) + 0.05 * Math.sin(q * 2 * TAU + 2) * spd,
+      bob: 1.6 * Math.cos(q * 2 * TAU) * spd,
+    });
+    const ant = antennae(t, sA, fA, excite, q);
+    ant[0].fA += 1.05 * pulse(t, T.a1, 0.12, 0.25); ant[0].sA += 0.4 * pulse(t, T.a1, 0.12, 0.25);
+    ant[1].fA += 1.05 * pulse(t, T.a2, 0.12, 0.25); ant[1].sA += 0.4 * pulse(t, T.a2, 0.12, 0.25);
+    pose.ant = ant;
+    // Front-left leg lifts and taps the rind three times.
+    const w = smooth(invLerp(T.lift, T.lift + 0.35, t)) * (1 - smooth(invLerp(T.tap3 + 0.1, T.tap3 + 0.45, t)));
+    if (w > 0) {
+      let down = 0;
+      for (const tk of [T.tap1, T.tap2, T.tap3]) down += t < tk ? smooth(invLerp(tk - 0.1, tk, t)) : 1 - smooth(invLerp(tk + 0.05, tk + 0.26, t));
+      down = clamp(down);
+      const o = MELON_SURF.at(MELON_SURF.sAtX(CRACK.x0));
+      const upx = o.x + 4 + o.nx * 40, upy = o.y + o.ny * 40;
+      const L = pose.legs[0];
+      L.tip = [lerp(L.tip[0], lerp(upx, o.x, down), w), lerp(L.tip[1], lerp(upy, o.y, down), w)];
+      L.lift = Math.max(L.lift, 40 * (1 - down) * w); L.free = w > 0.5 && down < 0.8;
+    }
+    return pose;
+  }
+  if (t < T.land) return flightPose(t, pose);
+  // On the red flesh.
+  const D = moveD(PLAN.redMoves, t, PLAN.DlandR);
+  const v = speedAt(PLAN.redMoves, t, PLAN.DlandR), spd = clamp(Math.abs(v) / 90);
+  const q = (D - PLAN.DlandR) / STRIDE;
+  const sit = CHR.sit(t);
+  let head = CHR.head(t) + 0.2 * Math.sin(TAU * 7 * (t - T.land)) * pulse(t, T.land + 0.8, 0.3, 0.35);   // dazed head shake
+  const bite = Math.min(1, PLAN.bites.reduce((a, b) => a + pulse(t, b, 0.06, 0.11), 0));
+  head = lerp(head, 1.0 + 0.2 * bite, sit);
+  groundPose(pose, FLESH_SURF, D, PLAN.DlandR, {
+    crouch: CHR.crouch(t), pitch: lerp(CHR.pitch(t), -0.72, sit) + 0.02 * Math.sin(q * 2 * TAU + 1) * spd,
+    head, gaster: lerp(0, 0.82, sit), bob: 1.6 * Math.cos(q * 2 * TAU) * spd, sit,
+  });
+  pose.ant = antennae(t, lerp(CHR.sA(t), -1.25, sit), lerp(CHR.fA(t), -0.15, sit), pulse(t, T.land + 0.3, 0.2, 0.8), q);
+  // Legs settle out of the flight tumble.
+  const settle = smooth(invLerp(T.land, T.land + 0.14, t));
+  if (settle < 1) { const fp = flightPose(T.land - 1e-3, { legs: [] }); pose.legs.forEach((L, i) => { L.tip = [lerp(fp.legs[i].tip[0], L.tip[0], settle), lerp(fp.legs[i].tip[1], L.tip[1], settle)]; }); }
+  // The seed: resting in the flesh, then picked up, then held and nibbled.
+  const held = heldSeedPos(pose);
+  const g = smooth(invLerp(T.grab, T.grab + 0.35, t));
+  const nBites = PLAN.bites.filter(b => b < t).length;
+  const sr = PLAN.seedRest;
+  pose.seed = {
+    x: lerp(sr.x, held.x, g), y: lerp(sr.y, held.y, g),
+    ang: lerp(sr.ang, -1.2 + 0.08 * Math.sin(t * 3), g),
+    len: sr.len, wid: sr.wid, scale: Math.max(0.62, 1 - 0.03 * nBites),
+  };
+  if (sit > 0) {
+    const s = pose.seed, ca = Math.cos(pose.ang), sa = Math.sin(pose.ang);
+    const hold = (L, ox, oy) => { const tx = s.x + ox * ca - oy * sa, ty = s.y + ox * sa + oy * ca; L.tip = [lerp(L.tip[0], tx, sit), lerp(L.tip[1], ty, sit)]; L.free = sit > 0.5; };
+    hold(pose.legs[0], -10, 10); hold(pose.legs[3], 12, 6);
+    const ground = (L, ds) => { const p = FLESH_SURF.at(D + ds); L.tip = [lerp(L.tip[0], p.x, sit), lerp(L.tip[1], p.y, sit)]; L.lift *= 1 - sit; };
+    ground(pose.legs[2], 24 * SC); ground(pose.legs[5], 38 * SC); ground(pose.legs[1], 2 * SC); ground(pose.legs[4], 12 * SC);
+  }
+  return pose;
+}
+function heldSeedPos(pose) {                       // in front of the chest, below the mandibles
+  const a = pose.surf.at(pose.D).ang, [lx, ly] = [70, 6].map(v => v * SC), ca = Math.cos(a), sa = Math.sin(a);
+  return { x: pose.x + lx * ca - ly * sa, y: pose.y + lx * sa + ly * ca };
+}
+function groundPose(pose, surf, D, Dref, c) {
+  const sp = surf.at(D);
+  const sit = c.sit || 0;
+  const h = ANT.h * SC * c.crouch * lerp(1, 1.12, sit) + (c.bob || 0);
+  pose.x = sp.x + sp.nx * h - Math.cos(sp.ang) * 6 * SC * sit;
+  pose.y = sp.y + sp.ny * h - Math.sin(sp.ang) * 6 * SC * sit;
+  pose.ang = sp.ang + c.pitch;
+  pose.head = c.head; pose.gaster = c.gaster;
+  pose.surf = surf; pose.D = D;
+  for (const leg of ANT.legs) {
+    const f = footPlan(leg, D, Dref), fp = surf.at(f.s);
+    pose.legs.push({ tip: [fp.x + fp.nx * f.lift, fp.y + fp.ny * f.lift], tan: fp.ang, lift: f.lift, free: false });
+  }
+}
+function flightPose(t, pose) {
+  const T = PLAN.T, u = clamp((t - T.pop) / (T.land - T.pop));
+  const pre = antPose(T.pop - 1e-3);
+  const sp = FLESH_SURF.at(PLAN.DlandR), h = ANT.h * SC * 0.62;
+  const x1 = sp.x + sp.nx * h, y1 = sp.y + sp.ny * h;
+  pose.x = lerp(pre.x, x1, u);
+  pose.y = lerp(pre.y, y1, u) - 4 * 175 * u * (1 - u);
+  pose.ang = lerp(pre.ang, sp.ang + 0.12, u) - TAU * easeInOut(u);
+  pose.head = lerp(-0.25, 0.3, u); pose.gaster = lerp(0.22, 0, u);
+  pose.surf = FLESH_SURF; pose.D = PLAN.DlandR; pose.shadow = 0.4 + 0.6 * u;
+  const ca = Math.cos(pose.ang), sa = Math.sin(pose.ang);
+  const reach = smooth(invLerp(0.7, 1, u));
+  ANT.legs.forEach((leg, i) => {
+    const lx = leg.rest * SC * 0.85 + 8 * Math.sin(TAU * 5 * t + i * 1.9), ly = (ANT.h - 6) * SC + 8 * Math.cos(TAU * 6 * t + i);
+    let tip = [pose.x + lx * ca - ly * sa, pose.y + lx * sa + ly * ca];
+    if (reach > 0) { const f = footPlan(leg, PLAN.DlandR, PLAN.DlandR), fp = FLESH_SURF.at(f.s); tip = [lerp(tip[0], fp.x, reach), lerp(tip[1], fp.y, reach)]; }
+    pose.legs.push({ tip, tan: pose.ang, lift: 10 * (1 - reach), free: reach < 0.5 });
+  });
+  pose.ant = [0, 1].map(i => ({ sA: -2.25 + 0.2 * Math.sin(TAU * 4 * t + i), fA: -2.75 + 0.3 * Math.sin(TAU * 6 * t + i * 2) }));
+  return pose;
+}
+
+/* ============================ drawing the ant ============================= */
+function drawAnt(g, P, tick) {
+  const s = SC, ca = Math.cos(P.ang), sa = Math.sin(P.ang);
+  const W2 = (lx, ly) => [P.x + (lx * ca - ly * sa) * s, P.y + (lx * sa + ly * ca) * s];
+  const upx = sa, upy = -ca;
+  // Legs, solved in world space.
+  const legs = ANT.legs.map((leg, i) => {
+    const L = P.legs[i];
+    const hip = W2(leg.hip[0], leg.hip[1]);
+    const tro = W2(leg.hip[0] + leg.dir * 2, leg.hip[1] + leg.coxa);
+    const ta = L.free ? P.ang : L.tan, tcx = Math.cos(ta), tcy = Math.sin(ta), nx = Math.sin(ta), ny = -Math.cos(ta);
+    const curl = clamp(L.lift / 12);
+    const along = leg.dir * leg.tarsus * s * lerp(0.82, 0.55, curl), up = leg.tarsus * s * lerp(0.55, 0.75, curl);
+    const ankle = [L.tip[0] - tcx * along + nx * up, L.tip[1] - tcy * along + ny * up];
+    const knee = ik2(tro[0], tro[1], ankle[0], ankle[1], leg.femur * s, leg.tibia * s, upx, upy);
+    const r = mulberry32(hash3(tick, i, 404)), j = () => (r() - 0.5) * 0.9;
+    return { leg, hip, tro, knee: [knee[0] + j(), knee[1] + j()], ankle: [ankle[0] + j(), ankle[1] + j()], tip: L.tip };
+  });
+  const drawLeg = (Lg, near) => {
+    const k = near ? 1 : 0.78;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const seg = (a, b, w) => { g.lineWidth = w * s * k; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); };
+    const all = pad => { seg(Lg.hip, Lg.tro, 6 + pad); seg(Lg.tro, Lg.knee, 5.2 + pad); seg(Lg.knee, Lg.ankle, 3.8 + pad); seg(Lg.ankle, Lg.tip, 2.6 + pad); };
+    if (near) { g.strokeStyle = '#efe2c6'; g.globalAlpha = 0.6; all(2.0); g.globalAlpha = 1; }
+    g.strokeStyle = near ? '#2a180e' : '#6b4a36';
+    all(0);
+    if (near) {
+      g.strokeStyle = '#9a6a45'; g.globalAlpha = 0.75; g.lineWidth = 1.1 * s;
+      const o = 1.3 * s, dx = Lg.knee[0] - Lg.tro[0], dy = Lg.knee[1] - Lg.tro[1], l = Math.hypot(dx, dy) || 1;
+      g.beginPath(); g.moveTo(Lg.tro[0] - dy / l * o + dx * 0.2, Lg.tro[1] + dx / l * o + dy * 0.2); g.lineTo(Lg.knee[0] - dy / l * o - dx * 0.15, Lg.knee[1] + dx / l * o - dy * 0.15); g.stroke();
+      g.globalAlpha = 1;
+    }
+  };
+  const drawAntenna = (A, near) => {
+    const [bx, by] = ANT.antBase;
+    const ex = bx + Math.cos(A.sA) * ANT.scape, ey = by + Math.sin(A.sA) * ANT.scape;
+    const tx = ex + Math.cos(A.fA) * ANT.funic, ty = ey + Math.sin(A.fA) * ANT.funic;
+    const mx = (ex + tx) / 2 + Math.sin(A.fA) * 2.5, my = (ey + ty) / 2 - Math.cos(A.fA) * 2.5;
+    g.strokeStyle = near ? '#2a180e' : '#5a3b2a'; g.lineCap = 'round';
+    g.lineWidth = near ? 2.8 : 2.3; g.beginPath(); g.moveTo(bx, by); g.lineTo(ex, ey); g.stroke();
+    g.lineWidth = near ? 2.2 : 1.8; g.beginPath(); g.moveTo(ex, ey); g.quadraticCurveTo(mx, my, tx, ty); g.stroke();
+    g.fillStyle = near ? '#2a180e' : '#5a3b2a'; g.beginPath(); g.ellipse(tx, ty, 3.6, 2.4, A.fA, 0, TAU); g.fill();
+  };
+  const body = () => { g.translate(P.x, P.y); g.rotate(P.ang); g.scale(s, s); };
+  const headT = () => { body(); g.translate(ANT.neck[0], ANT.neck[1]); g.rotate(P.head); g.translate(-ANT.neck[0], -ANT.neck[1]); };
+  const gasterT = k => { body(); g.translate(ANT.waist[0], ANT.waist[1]); g.rotate(P.gaster * k); g.translate(-ANT.waist[0], -ANT.waist[1]); };
+
+  for (let i = 3; i < 6; i++) drawLeg(legs[i], false);
+  g.save(); headT(); drawAntenna(P.ant[1], false); g.restore();
+  g.save(); gasterT(1); drawPart(g, 'gaster', tick); g.restore();
+  g.save(); gasterT(0.5); drawPart(g, 'petiole', tick); g.restore();
+  g.save(); body(); drawPart(g, 'thorax', tick); g.restore();
+  g.save(); headT();
+  drawPart(g, 'head', tick);
+  g.fillStyle = '#0d0604';
+  g.beginPath(); P.blink ? g.ellipse(57, -10, 5.5, 0.9, -0.3, 0, TAU) : g.ellipse(57, -10, 5.6, 4.5, -0.3, 0, TAU); g.fill();
+  if (!P.blink) { g.fillStyle = '#fff8ec'; g.beginPath(); g.arc(55.2, -11.6, 1.5, 0, TAU); g.fill(); }
+  g.strokeStyle = '#1e0f07'; g.lineWidth = 2.4; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(64, 7); g.quadraticCurveTo(73, 7, 75, 12); g.moveTo(62, 10); g.quadraticCurveTo(69, 13, 70, 16); g.stroke();
+  g.restore();
+  if (P.seed) {
+    g.save(); g.translate(P.seed.x, P.seed.y); g.rotate(P.seed.ang); g.scale(P.seed.scale, P.seed.scale);
+    g.beginPath(); seedPath(g, P.seed.len, P.seed.wid); g.strokeStyle = '#efe2c6'; g.lineWidth = 5; g.globalAlpha = 0.75; g.stroke();
+    g.restore(); g.globalAlpha = 1;
+    drawSeed(g, P.seed, mulberry32(hash3(tick, 808)), P.seed.scale);
+  }
+  for (let i = 0; i < 3; i++) drawLeg(legs[i], true);
+  g.save(); headT(); drawAntenna(P.ant[0], true); g.restore();
+}
+function drawAntShadow(g, P, tick) {
+  if (!P.surf) return;
+  const sp = P.surf.at(P.D), a = 0.28 * P.shadow;
+  const onRed = P.surf === FLESH_SURF;
+  g.save(); g.translate(sp.x, sp.y + 3); g.rotate(sp.ang);
+  const r = mulberry32(hash3(tick, 505));
+  g.strokeStyle = onRed ? '#6e1a22' : '#12301a'; g.lineWidth = 2; g.globalAlpha = a; g.beginPath();
+  for (let i = 0; i < 26; i++) {
+    const x = (r() - 0.5) * 150 * SC, y = (r() - 0.5) * 7, l = 8 + r() * 10;
+    const fall = 1 - Math.abs(x) / (80 * SC); if (fall <= 0) continue;
+    g.moveTo(x - l / 2, y); g.lineTo(x + l / 2, y - 2);
+  }
+  g.stroke(); g.restore(); g.globalAlpha = 1;
+}
+
+/* ============================ crack drawing =============================== */
+function strokePts(g, pts, width, color, alpha) {
+  g.lineWidth = width; g.strokeStyle = color; g.globalAlpha = alpha;
+  g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+}
+function crackPts(L, tick) {
+  const r = mulberry32(hash3(tick, 606)), out = [];
+  for (let i = 0; i < CRACK.pts.length && CRACK.cum[i] <= L; i++) out.push([CRACK.pts[i][0] + (r() - 0.5) * 1.1, CRACK.pts[i][1] + (r() - 0.5) * 1.1]);
+  if (out.length && L < CRACK.total) out.push(CRACK.pointAt(L));
+  return out;
+}
+function crackIntensity(t) {
+  const T = PLAN.T;
+  if (t < CRACK_T.appear) return 0;
+  let I = 0.72 + 0.6 * pulse(t, CRACK_T.appear + 0.05, 0.05, 0.6) + 0.22 * pulse(t, CRACK_T.lastBurst(t) + 0.08, 0.08, 0.5);
+  I += 0.5 * smooth(invLerp(CRACK_T.raceA, CRACK_T.raceB, t)) + 0.9 * pulse(t, T.pop - 0.05, 0.25, 0.05);
+  I *= 1 + 0.06 * Math.sin(t * 9);
+  if (t > T.pop) I *= 1 - smooth(invLerp(T.pop, T.pop + 0.3, t));
+  return I;
+}
+function drawCrack(g, t, tick) {
+  const L = CRACK_T.L(t); if (L <= 0) return;
+  const I = crackIntensity(t), pts = crackPts(L, tick);
+  const r = mulberry32(hash3(tick, 707));
+  const bpts = [];
+  for (const b of CRACK.branches) {
+    const bl = clamp((L - b.root - b.delay) * 0.55, 0, b.total); if (bl <= 0) continue;
+    const bp = [b.pts[0]];
+    for (let k = 1; k < b.pts.length; k++) {
+      if (b.cum[k] <= bl) bp.push(b.pts[k]);
+      else { const f = (bl - b.cum[k - 1]) / (b.cum[k] - b.cum[k - 1]); bp.push([lerp(b.pts[k - 1][0], b.pts[k][0], f), lerp(b.pts[k - 1][1], b.pts[k][1], f)]); break; }
+    }
+    bpts.push(bp);
+  }
+  g.save(); g.lineCap = 'round'; g.lineJoin = 'round';
+  g.globalCompositeOperation = 'lighter';
+  const gw = clamp(L / 60, 0.35, 1);
+  for (const [w, a] of [[34 * gw, 0.05], [18 * gw, 0.1], [9, 0.18]]) { strokePts(g, pts, w, '#fff0b4', a * I); for (const bp of bpts) strokePts(g, bp, w * 0.6, '#fff0b4', a * I * 0.8); }
+  g.globalCompositeOperation = 'source-over';
+  const off = pts.map(([x, y]) => [x + 1.3, y + 1.1]);
+  strokePts(g, off, 5.6, '#10280f', 0.85);
+  for (const bp of bpts) strokePts(g, bp.map(([x, y]) => [x + 1, y + 1]), 3.4, '#10280f', 0.8);
+  strokePts(g, pts, 3.4, '#fff6d8', 0.95);
+  for (const bp of bpts) strokePts(g, bp, 2, '#fff6d8', 0.9);
+  strokePts(g, pts, 1.5, '#ffffff', clamp(I * 0.8));
+  // The growing tip sparkles.
+  const [tx, ty] = pts[pts.length - 1];
+  g.globalCompositeOperation = 'lighter';
+  const R = Math.min(26 + 12 * I, 10 + L * 0.7);
+  const rad = g.createRadialGradient(tx, ty, 0, tx, ty, R);
+  rad.addColorStop(0, `rgba(255,248,210,${0.5 * clamp(I, 0, 1.5)})`); rad.addColorStop(1, 'rgba(255,248,210,0)');
+  g.globalAlpha = 1; g.fillStyle = rad; g.beginPath(); g.arc(tx, ty, R, 0, TAU); g.fill();
+  g.globalCompositeOperation = 'source-over';
+  g.strokeStyle = '#fff8dc'; g.lineWidth = 1.6; g.globalAlpha = 0.9; g.beginPath();
+  for (let i = 0; i < 5; i++) { const a = r() * TAU, r0 = 5 + r() * 3, r1 = r0 + 5 + r() * 8 * I; g.moveTo(tx + Math.cos(a) * r0, ty + Math.sin(a) * r0); g.lineTo(tx + Math.cos(a) * r1, ty + Math.sin(a) * r1); }
+  g.stroke();
+  g.restore(); g.globalAlpha = 1;
+}
+
+/* ============================ the split =================================== */
+const PIVOT = [CRACK.pts[CRACK.pts.length - 1][0], 2150];
+const HALF_POLY = side => {
+  const P = [[CRACK.x0, 860], ...CRACK.pts, [CRACK.pts[CRACK.pts.length - 1][0], 2500]];
+  return side < 0 ? [...P, [-2500, 2500], [-2500, 860]] : [...P, [3500, 2500], [3500, 860]];
+};
+const POLYS = { '-1': HALF_POLY(-1), '1': HALF_POLY(1) };
+function halfAngle(t) {
+  const u = t - PLAN.T.pop; if (u <= 0) return 0;
+  return 0.07 * easeOut3(clamp(u / 0.12)) + (u > 0.22 ? (u - 0.22) * (u - 0.22) * 1.15 : 0);
+}
+function drawHalves(g, t, tick) {
+  const u = t - PLAN.T.pop, th = halfAngle(t);
+  if (th > 1.25) return;
+  const band = 30 * smooth(clamp(u / 0.35));
+  for (const side of [-1, 1]) {
+    g.save();
+    g.translate(PIVOT[0] + side * 26 * easeOut3(clamp(u / 0.3)), PIVOT[1]); g.rotate(side * th); g.translate(-PIVOT[0], -PIVOT[1]);
+    g.save(); g.beginPath(); polyPath(g, POLYS[side]); g.clip();
+    g.fillStyle = '#efe4cc'; g.beginPath(); g.ellipse(MELON.cx, MELON.cy, MELON.a, MELON.b, 0, 0, TAU); g.fill();
+    LAYERS.melon.draw(g, tick); g.restore();
+    // The cut edge of the rind shell: pale rind, with a blush of flesh where it tore away.
+    if (band > 0.5) {
+      const inner = CRACK.pts.map(([x, y], i) => {
+        const [ax, ay] = CRACK.pts[Math.max(0, i - 1)], [bx, by] = CRACK.pts[Math.min(CRACK.pts.length - 1, i + 1)];
+        const l = Math.hypot(bx - ax, by - ay) || 1; const nx = -(by - ay) / l * -side, ny = (bx - ax) / l * -side;
+        const w = band * (0.8 + 0.2 * Math.sin(i * 0.7));
+        return [x + nx * w, y + ny * w];
+      }).filter(([, y]) => y > ellipseY(MELON, CRACK.x0) - 4);
+      const edge = CRACK.pts.filter(([, y]) => y > ellipseY(MELON, CRACK.x0) - 4);
+      g.beginPath(); polyPath(g, [...edge, ...inner.slice().reverse()]);
+      g.fillStyle = '#e4ebbf'; g.globalAlpha = 0.95; g.fill();
+      g.save(); g.clip();
+      const r = mulberry32(hash3(tick, 909 + side));
+      g.strokeStyle = '#c8d796'; g.lineWidth = 2; g.globalAlpha = 0.8; g.beginPath();
+      for (let i = 0; i < edge.length; i += 2) { const [x, y] = edge[i]; const o = r() * band; g.moveTo(x - side * o, y - 5); g.lineTo(x - side * o + 3, y + 5); }
+      g.stroke(); g.restore();
+      strokePts(g, inner, 3.4, '#e7887a', 0.9);
+      strokePts(g, edge, 2.6, '#16301a', 0.95);
+      g.globalAlpha = 1;
+    }
+    g.restore();
+  }
+}
+
+/* ======================= juice, pop lines, crumbs ======================== */
+const DROPS = (() => {
+  const rng = mulberry32(606), arr = [];
+  for (let i = 0; i < 26; i++) {
+    const L = rng() * 420, [x, y] = CRACK.pointAt(L), side = rng() < 0.5 ? -1 : 1;
+    arr.push({ x: x + side * 4, y, vx: side * (60 + 320 * rng()), vy: -(240 + 520 * rng()) * (1 - L / 700), r: 4 + 7 * rng(), delay: rng() * 0.08, pale: rng() < 0.35 });
+  }
+  return arr;
+})();
+function drawParticles(g, t, tick) {
+  const T = PLAN.T, u0 = t - T.pop;
+  if (u0 >= 0 && u0 < 0.45) {                           // soft "pop" lines around the top of the crack
+    const k = u0 / 0.45, r = mulberry32(hash3(tick, 111));
+    g.strokeStyle = '#f7e39c'; g.lineWidth = 3; g.lineCap = 'round'; g.globalAlpha = 1 - k; g.beginPath();
+    for (let i = 0; i < 12; i++) {
+      const a = -Math.PI + (i / 11) * Math.PI + (r() - 0.5) * 0.1, r0 = 40 + 120 * easeOut3(k), r1 = r0 + 26 * (1 - k) + 8;
+      g.moveTo(CRACK.x0 + Math.cos(a) * r0, CRACK.y0 + Math.sin(a) * r0); g.lineTo(CRACK.x0 + Math.cos(a) * r1, CRACK.y0 + Math.sin(a) * r1);
+    }
+    g.stroke(); g.globalAlpha = 1;
+  }
+  if (u0 >= 0 && u0 < 1.9) {                            // juice droplets
+    for (const d of DROPS) {
+      const u = u0 - d.delay; if (u < 0) continue;
+      const x = d.x + d.vx * u, y = d.y + d.vy * u + 850 * u * u;
+      if (y > H + 60) continue;
+      const a = 1 - smooth(invLerp(1.2, 1.8, u)), vy = d.vy + 1700 * u, ang = Math.atan2(vy, d.vx);
+      g.save(); g.translate(x, y); g.rotate(ang); g.globalAlpha = a;
+      g.fillStyle = d.pale ? '#f48c7c' : '#dc4a3f'; g.beginPath(); g.ellipse(0, 0, d.r * 1.25, d.r * 0.85, 0, 0, TAU); g.fill();
+      g.strokeStyle = '#9f2531'; g.lineWidth = 1.4; g.stroke();
+      g.fillStyle = '#fff4ec'; g.beginPath(); g.arc(-d.r * 0.3, -d.r * 0.3, d.r * 0.25, 0, TAU); g.fill();
+      g.restore();
+    }
+    g.globalAlpha = 1;
+  }
+  // Crumbs from each nibble.
+  const P = antPoseCache.pose;
+  if (P && P.seed && t > T.feast - 1) {
+    for (let bi = 0; bi < PLAN.bites.length; bi++) {
+      const u = t - PLAN.bites[bi]; if (u < 0 || u > 0.7) continue;
+      const r = mulberry32(hash3(bi, 222));
+      for (let k = 0; k < 3; k++) {
+        const vx = (r() - 0.5) * 90, vy = -40 - r() * 60;
+        const x = P.seed.x + vx * u, y = Math.min(P.seed.y + vy * u + 700 * u * u, fleshTopY(P.seed.x + vx * u) - 1);
+        g.fillStyle = '#3a2216'; g.globalAlpha = 1 - smooth(invLerp(0.5, 0.7, u));
+        g.fillRect(x - 1.5, y - 1.5, 3, 3);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+}
+
+/* =============================== camera =================================== */
+const CAM = (() => {
+  const T = PLAN.T;
+  return {
+    z: track([[0, 1], [T.arrive, 1.025], [T.tap3, 1.05], [T.creepEnd, 1.1], [T.pop, 1.12], [T.pop + 1.1, 1.18], [T.grab, 1.3], [T.feast, 1.42], [T.end, 1.75]]),
+    x: track([[0, 540], [T.arrive, 545], [T.tap3, 556], [T.creepEnd, 560], [T.pop, 560], [T.pop + 1.1, 620], [T.grab, 680], [T.feast, 700], [T.end, 712]]),
+    y: track([[0, 960], [T.arrive, 975], [T.tap3, 1010], [T.creepEnd, 1060], [T.pop, 1060], [T.pop + 1.1, 1050], [T.feast, 1035], [T.end, 1045]]),
+  };
+})();
+function camera(t) {
+  const T = PLAN.T;
+  let z = CAM.z(t), x = CAM.x(t), y = CAM.y(t);
+  let amp = 6 * smooth(invLerp(T.splitStart, T.pop - 0.15, t)) * (t < T.pop ? 1 : 0);
+  if (t >= T.pop) { const k = Math.exp(-(t - T.pop) * 8); amp += 10 * k; z += 0.035 * Math.exp(-(t - T.pop) * 6); }
+  return { z, x: x + amp * vnoise(t * 13, 1), y: y + amp * vnoise(t * 11, 2), rot: amp * 0.0012 * vnoise(t * 9, 3) };
+}
+
+/* ================================ render ================================== */
+let PAPER, TOOTH, VIGNETTE;
+const LAYERS = {
+  sky: new BoilLayer({ name: 'sky', box: { x0: 0, y0: 0, x1: W, y1: 1330 }, res: 1.2, seed: 1, passes: 3, build: buildSky }),
+  melon: new BoilLayer({ name: 'melon', box: MEL_BOX, res: 1.05, seed: 2, passes: CONFIG.boilPasses, build: buildMelon }),
+  flesh: new BoilLayer({ name: 'flesh', box: RED_BOX, res: 1.5, seed: 3, passes: CONFIG.boilPasses, build: buildFlesh }),
+};
+const antPoseCache = { t: -1, pose: null };
+function render(ctx, t) {
+  const T = PLAN.T, tick = Math.floor(t * CONFIG.boilFps + 1e-6);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.drawImage(PAPER, 0, 0);
+  const cam = camera(t);
+  ctx.translate(W / 2, H / 2); ctx.rotate(cam.rot); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
+  if (t < T.pop) {
+    ctx.save(); ctx.beginPath(); ctx.moveTo(-600, -600); ctx.lineTo(W + 600, -600);
+    for (let x = W + 600; x >= -600; x -= 20) ctx.lineTo(x, Math.abs(x - MELON.cx) < MELON.a ? ellipseY(MELON, x) + 1 : 4000);
+    ctx.closePath(); ctx.clip(); LAYERS.sky.draw(ctx, tick); ctx.restore();
+  } else LAYERS.sky.draw(ctx, tick);
+  const P = antPose(t); antPoseCache.t = t; antPoseCache.pose = P;
+  if (t >= T.pop) {
+    LAYERS.flesh.draw(ctx, tick);
+    if (P.seed && t < T.grab) drawSeed(ctx, P.seed, mulberry32(hash3(tick, 808)), 1);
+    drawHalves(ctx, t, tick);
+  } else {
+    LAYERS.melon.draw(ctx, tick);
+    drawCrack(ctx, t, tick);
+  }
+  drawAntShadow(ctx, P, tick);
+  if (P.seed && t < T.grab) { const s = P.seed; P.seed = null; drawAnt(ctx, P, tick); P.seed = s; } else drawAnt(ctx, P, tick);
+  drawParticles(ctx, t, tick);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 0.55; ctx.drawImage(TOOTH, -(hash3(tick, 99) % 64), -(hash3(tick, 98) % 64)); ctx.globalAlpha = 1;
+  ctx.fillStyle = VIGNETTE; ctx.fillRect(0, 0, W, H);
+  const f = Math.max(1 - smooth(clamp(t / 0.6)), smooth(invLerp(T.fade, FILM_END, t)));
+  if (f > 0.002) { ctx.globalAlpha = f; ctx.fillStyle = CONFIG.fadeColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+}
+
+/* ================================ music =================================== */
+const AUDIO = { ready: false, failed: false, N: null, score: null, loading: null };
+function loadTone() {
+  if (window.Tone) return Promise.resolve(true);
+  if (AUDIO.loading) return AUDIO.loading;
+  AUDIO.loading = new Promise(res => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js';
+    s.onload = () => res(!!window.Tone); s.onerror = () => res(false);
+    document.head.appendChild(s);
+    setTimeout(() => res(!!window.Tone), 8000);
+  });
+  return AUDIO.loading;
+}
+function buildInstruments() {
+  const T = window.Tone;
+  const master = new T.Gain(0.9);
+  const comp = new T.Compressor({ threshold: -20, ratio: 2.6, attack: 0.01, release: 0.25 });
+  const limiter = new T.Limiter(-2);
+  // Soft clipper after the limiter: transparent below 0.8, never reaches full scale.
+  const out = new T.WaveShaper(x => (Math.abs(x) < 0.8 ? x : Math.sign(x) * (0.8 + 0.2 * Math.tanh((Math.abs(x) - 0.8) / 0.2))), 4096);
+  master.chain(comp, limiter, out, T.getDestination());
+  const reverb = new T.Reverb({ decay: 3.8, preDelay: 0.03 });
+  reverb.wet.value = 1; reverb.connect(master);
+  const route = (node, dry, wet) => { if (dry) node.connect(new T.Gain(dry).connect(master)); if (wet) node.connect(new T.Gain(wet).connect(reverb)); return node; };
+  // Noise sources must start strictly later than their previous start; keep them in order.
+  const lastStart = new Map();
+  const after = (key, time) => { const l = lastStart.has(key) ? lastStart.get(key) : -1; const t = time > l + 5e-4 ? time : l + 2e-3; lastStart.set(key, t); return t; };
+
+  // Marimba: sine bar + its tuned 4th partial that dies quickly + a mallet click.
+  const marF = route(new T.PolySynth(T.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.002, decay: 1.2, sustain: 0, release: 1.0 } }), 0.9, 0.28);
+  const marO = route(new T.PolySynth(T.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.001, decay: 0.09, sustain: 0, release: 0.06 } }), 0.9, 0.2);
+  const marC = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.012, sustain: 0, release: 0.01 } });
+  const marCF = new T.Filter(2600, 'bandpass'); marC.connect(marCF); route(marCF, 0.5, 0.1);
+  marF.volume.value = -9; marO.volume.value = -15; marC.volume.value = -30;
+  const marimba = (note, time, vel) => {
+    const f = T.Frequency(note).toFrequency();
+    marF.triggerAttackRelease(f, clamp(0.25 + 140 / f, 0.2, 1.1), time, vel);
+    marO.triggerAttackRelease(f * 4, 0.06, time, vel * 0.8);
+    if (!lastStart.has('click') || time > lastStart.get('click') + 0.004) { lastStart.set('click', time); marC.triggerAttackRelease(0.01, time, vel * 0.5); }
+  };
+  // Plucked bass (pizzicato-like): sawtooth through a snapping low-pass.
+  const pluck = route(new T.PolySynth(T.MonoSynth, {
+    oscillator: { type: 'sawtooth' },
+    filter: { type: 'lowpass', Q: 1.2, rolloff: -24 },
+    envelope: { attack: 0.003, decay: 0.35, sustain: 0, release: 0.25 },
+    filterEnvelope: { attack: 0.002, decay: 0.12, sustain: 0.12, release: 0.2, baseFrequency: 150, octaves: 3.2, exponent: 2 },
+  }), 0.95, 0.22);
+  pluck.volume.value = -9;
+  // Celesta / glass bells for the rising pattern and the juice.
+  const bells = route(new T.PolySynth(T.FMSynth, {
+    harmonicity: 4, modulationIndex: 1.6, oscillator: { type: 'sine' }, modulation: { type: 'sine' },
+    envelope: { attack: 0.002, decay: 1.3, sustain: 0, release: 1.2 },
+    modulationEnvelope: { attack: 0.002, decay: 0.35, sustain: 0, release: 0.3 },
+  }), 0.75, 0.55);
+  bells.volume.value = -17;
+  const tokS = route(new T.MembraneSynth({ pitchDecay: 0.01, octaves: 1.8, envelope: { attack: 0.001, decay: 0.11, sustain: 0, release: 0.03 } }), 0.95, 0.25);
+  tokS.volume.value = -8;
+  const heartS = route(new T.MembraneSynth({ pitchDecay: 0.04, octaves: 3.5, envelope: { attack: 0.002, decay: 0.3, sustain: 0, release: 0.1 } }), 1, 0.1);
+  heartS.volume.value = -6;
+  const timp = route(new T.MembraneSynth({ pitchDecay: 0.05, octaves: 4, envelope: { attack: 0.002, decay: 0.42, sustain: 0, release: 0.2 } }), 1, 0.2);
+  timp.volume.value = -7;
+  const crk = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.01 } });
+  const crkF = new T.Filter({ type: 'bandpass', frequency: 2500, Q: 1.6 }); crk.connect(crkF); route(crkF, 0.9, 0.3);
+  crk.volume.value = -13;
+  // Drone: sustained low strings that open up as the crack spreads.
+  const droneF = new T.Filter({ type: 'lowpass', frequency: 220, Q: 0.7 }), droneG = new T.Gain(0);
+  const drone = new T.PolySynth(T.Synth, { oscillator: { type: 'fatsawtooth', count: 3, spread: 18 }, envelope: { attack: 0.6, decay: 0.1, sustain: 1, release: 0.16 } });
+  drone.chain(droneF, droneG); route(droneG, 0.9, 0.35); drone.volume.value = -15;
+  // Warm pad for the ending.
+  const padF = new T.Filter({ type: 'lowpass', frequency: 1300, Q: 0.5 });
+  const pad = new T.PolySynth(T.Synth, { oscillator: { type: 'fatsawtooth', count: 3, spread: 26 }, envelope: { attack: 1.4, decay: 0.6, sustain: 0.85, release: 2.8 } });
+  pad.connect(padF); route(padF, 0.8, 0.55); pad.volume.value = -21;
+  // Riser: pink noise swelling into the split.
+  const rN = new T.Noise('pink'), rF = new T.Filter({ type: 'lowpass', frequency: 300, Q: 1.2 }), rG = new T.Gain(0);
+  rN.chain(rF, rG); route(rG, 0.8, 0.4);
+  // The pop: a rising bubble "bloop", a soft low thump and a puff of air.
+  const bloop = route(new T.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.002, decay: 0.13, sustain: 0, release: 0.08 } }), 1, 0.3);
+  bloop.volume.value = -3;
+  const puff = new T.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.004, decay: 0.2, sustain: 0, release: 0.05 } });
+  const puffF = new T.Filter(900, 'lowpass'); puff.connect(puffF); route(puffF, 1, 0.3); puff.volume.value = -12;
+
+  const N = {
+    out, master,
+    marimba,
+    pluck: (note, time, vel, dur = 0.3) => pluck.triggerAttackRelease(note, dur, time, vel),
+    bell: (note, time, vel, dur = 1.2) => bells.triggerAttackRelease(note, dur, time, vel),
+    tok: (time, v) => tokS.triggerAttackRelease('G5', 0.08, time, v),
+    heart: (time, v) => heartS.triggerAttackRelease('A1', 0.2, time, v),
+    timp: (time, v) => timp.triggerAttackRelease('A1', 0.1, time, v),
+    crackle: (time, v) => {
+      time = after('crk', time);
+      crkF.frequency.setValueAtTime(1500 + Math.random() * 3000, time);
+      crk.triggerAttackRelease(0.015 + Math.random() * 0.03, time, v);
+    },
+    nibble: time => { time = after('crk', time); crkF.frequency.setValueAtTime(5200, time); crk.triggerAttackRelease(0.012, time, 0.3); },
+    droneOn(notes, time, into, t0, t1) {
+      const total = t1 - t0, rem = total - into; if (rem <= 0.05) return;
+      const cut = p => 180 * Math.pow(1600 / 180, Math.pow(p, 1.6)), lev = p => 0.25 + 0.75 * Math.pow(p, 1.3);
+      droneF.frequency.cancelScheduledValues(time); droneG.gain.cancelScheduledValues(time);
+      const p0 = into / total;
+      droneF.frequency.setValueAtTime(cut(p0), time);
+      droneG.gain.setValueAtTime(into > 0 ? lev(p0) : 0, time);
+      if (into === 0) droneG.gain.linearRampToValueAtTime(lev(0.02), time + 2.5);
+      for (let p = Math.ceil(p0 * 20) / 20; p <= 1.0001; p += 0.05) {
+        const at = time + (p - p0) * total;
+        droneF.frequency.linearRampToValueAtTime(cut(p), at);
+        if (at > time + 2.5 || into > 0) droneG.gain.linearRampToValueAtTime(lev(p), at);
+      }
+      drone.triggerAttack(notes, time);
+      drone.triggerRelease(notes, time + rem);
+    },
+    padOn(notes, time, into, dur, vel) { const rem = dur - into; if (rem > 0.05) pad.triggerAttackRelease(notes, rem, time, vel); },
+    riser(time, into, dur) {
+      const rem = dur - into; if (rem <= 0.05) return;
+      const p0 = into / dur;
+      rF.frequency.cancelScheduledValues(time); rG.gain.cancelScheduledValues(time);
+      rF.frequency.setValueAtTime(300 * Math.pow(18, p0), time);
+      rF.frequency.exponentialRampToValueAtTime(5400, time + rem - 0.08);
+      rG.gain.setValueAtTime(0.2 * p0 * p0, time);
+      rG.gain.linearRampToValueAtTime(0.2, time + rem - 0.08);
+      rG.gain.linearRampToValueAtTime(0, time + rem);
+      time = after('riser', time); rN.start(time); rN.stop(time + rem + 0.05);
+    },
+    pop(time) {
+      bloop.triggerAttackRelease(190, 0.12, time, 0.9);
+      bloop.frequency.setValueAtTime(190, time); bloop.frequency.exponentialRampToValueAtTime(820, time + 0.055);
+      timp.triggerAttackRelease('D2', 0.3, time, 0.85);
+      puff.triggerAttackRelease(0.15, after('puff', time), 0.6);
+    },
+    fadeOut(time, into, dur) {
+      const p0 = clamp(into / dur), rem = Math.max(0.05, dur - into);
+      master.gain.cancelScheduledValues(time);
+      master.gain.setValueAtTime(0.9 * (1 - p0), time);
+      master.gain.linearRampToValueAtTime(0.9 * (1 - p0) * 0.45, time + rem * 0.6);
+      master.gain.linearRampToValueAtTime(0, time + rem);
+    },
+    silence() {
+      const now = T.now();
+      for (const s of [marF, marO, bells, drone, pad, pluck]) s.releaseAll(now);
+      try { if (rN.state === 'started') rN.stop(now); } catch (e) { /* already stopped */ }
+      for (const p of [droneF.frequency, droneG.gain, rF.frequency, rG.gain, master.gain]) p.cancelScheduledValues(now);
+      droneG.gain.setValueAtTime(0, now); rG.gain.setValueAtTime(0, now); master.gain.setValueAtTime(0.9, now);
+    },
+  };
+  N.ready = reverb.ready || Promise.resolve();
+  return N;
+}
+
+// The score, written against the same SCENES/cues the animation uses.
+function buildScore(N) {
+  const T = PLAN.T, ev = [];
+  const one = (t, fn) => ev.push({ t, fn, dur: 0, sustain: false });
+  const hold = (t, dur, fn) => ev.push({ t, fn, dur, sustain: true });
+  const grid = id => { const s = sceneById[id], b = (s.end - s.start) / MUSIC_BEATS[id]; return beats => s.start + beats * b; };
+  const mar = (t, note, vel = 0.6) => one(t, time => N.marimba(note, time, vel));
+  const pz = (t, note, vel = 0.8, dur = 0.3) => one(t, time => N.pluck(note, time, vel, dur));
+  const bell = (t, note, vel = 0.5, dur = 1.2) => one(t, time => N.bell(note, time, vel, dur));
+  const hz = (n, oct) => window.Tone.Frequency(n).toFrequency() * Math.pow(2, oct);
+
+  // WALK — a tip-toe marimba tune over a plucked walking bass (D major).
+  {
+    const B = grid('walk');
+    const quiet = t => (t > T.pause + 0.05 && t < T.resume - 0.08) || t > T.arrive - 0.05;
+    const tune = [[0.5, 'F#5'], [1, 'A5'], [1.5, 'D6'], [2.5, 'A5'], [3, 'B5'], [3.5, 'A5'],
+      [4.5, 'G5'], [5, 'B5'], [5.5, 'D6'], [6.5, 'E6'], [7, 'D6'],
+      [9, 'F#5'], [9.5, 'A5'], [10, 'C#6'], [10.5, 'E6'], [11, 'D6'], [11.5, 'C#6'],
+      [12, 'D6'], [12.5, 'A5'], [13, 'F#5'], [13.5, 'D5'], [14, 'E5'], [14.5, 'F#5'], [15, 'A5']];
+    for (const [b, n] of tune) if (!quiet(B(b))) mar(B(b), n, b % 1 ? 0.55 : 0.68);
+    const bass = [[0, 'D3'], [1, 'A2'], [2, 'D3'], [3, 'A2'], [4, 'G2'], [5, 'D3'], [6, 'G2'], [9, 'A2'], [10, 'E3'], [11, 'C#3'], [12, 'D3'], [13, 'A2'], [14, 'F#2'], [15, 'A2']];
+    for (const [b, n] of bass) if (!quiet(B(b))) pz(B(b), n, 0.75);
+    mar(T.pause + 0.45, 'E6', 0.5); mar(T.pause + 0.6, 'E6', 0.42);       // sniff, sniff
+    mar(T.arrive, 'D5', 0.66); mar(T.arrive, 'A5', 0.45); pz(T.arrive, 'D2', 0.9);
+  }
+  // TAP — the music holds its breath; antenna boops, three taps, a glassy "tink".
+  {
+    hold(T.sniff - 0.3, T.look - T.sniff + 0.3, (time, into) => N.padOn(['D3', 'G3', 'B3', 'E4'], time, into, T.look - T.sniff + 0.3, 0.2));
+    pz(T.sniff, 'A2', 0.5);
+    mar(T.a1, 'B5', 0.45); mar(T.a2, 'E6', 0.42);
+    bell(T.lift, 'B6', 0.16, 0.6);
+    one(T.tap1, time => N.tok(time, 0.55)); pz(T.tap1, 'D2', 0.45);
+    one(T.tap2, time => N.tok(time, 0.65)); pz(T.tap2, 'D2', 0.5);
+    one(T.tap3, time => N.tok(time, 0.95)); pz(T.tap3, 'D2', 0.9);
+    bell(T.tap3 + 0.02, 'A6', 0.55, 2); bell(T.tap3 + 0.09, 'E7', 0.35, 2);
+    mar(T.look, 'F5', 0.5); mar(T.look + 0.42, 'E5', 0.45); mar(T.look + 0.84, 'D5', 0.5);
+    const dEnd = T.pop - 0.26;
+    hold(T.look, dEnd - T.look, (time, into) => N.droneOn(['D2', 'A2'], time, into, T.look, dEnd));
+  }
+  // CREEP — heartbeat, pedal drone and a figure that climbs a semitone every two bars.
+  {
+    const B = grid('creep');
+    for (let b = 0; b < 32; b += b < 16 ? 2 : 1) {
+      const t = B(b), v = 0.3 + 0.25 * (b / 32);
+      one(t, time => N.heart(time, v)); one(t + 0.17, time => N.heart(time, v * 0.6));
+    }
+    const chords = [['D4', 'F4', 'A4', 'D5', 'F5', 'A5'], ['Eb4', 'G4', 'Bb4', 'Eb5', 'G5', 'Bb5'], ['E4', 'G4', 'Bb4', 'D5', 'E5', 'G5'], ['F4', 'A4', 'C5', 'F5', 'A5', 'C6']];
+    const roots = ['D2', 'Eb2', 'E2', 'F2'], divs = [1, 0.5, 0.5, 1 / 3];
+    for (let grp = 0; grp < 4; grp++) {
+      for (let i = 0, b = grp * 8; b < grp * 8 + 8 - 1e-6; i++, b = grp * 8 + i * divs[grp]) {
+        bell(B(b), chords[grp][i % 6], 0.22 + 0.3 * (b / 32), 0.9);
+      }
+      pz(B(grp * 8), roots[grp], 0.7, 0.5); pz(B(grp * 8 + 4), roots[grp], 0.55, 0.5);
+    }
+    for (const b of CRACK_T.bursts) { const v = 0.55 + 0.35 * rand3(Math.round(b.t * 100), 3, 3); one(b.t, time => N.crackle(time, v)); one(b.t + 0.035, time => N.crackle(time, v * 0.6)); }
+    mar(T.glance + 0.2, 'B5', 0.32); mar(T.glance + 0.34, 'D6', 0.28);
+  }
+  // SPLIT — racing 16ths, riser, timpani roll… a breath… POP. Then juice, landing, hope.
+  {
+    const s = sceneById.split, B = grid('split'), tEnd = T.pop - 0.3;
+    const ch = [['F#4', 'A4', 'C5', 'Eb5'], ['G4', 'Bb4', 'D5', 'G5'], ['G#4', 'B4', 'D5', 'F5'], ['A4', 'C#5', 'E5', 'G5']];
+    for (let i = 0; B(i * 0.25) < tEnd; i++) {
+      const b = i * 0.25, c = ch[Math.min(3, Math.floor(b / 2))];
+      const f = hz(c[i % 4], Math.floor((i % 8) / 4)), t = B(b);
+      one(t, time => N.bell(f, time, 0.2 + 0.28 * invLerp(s.start, T.pop, t), 0.4));
+    }
+    for (let b = 0; B(b) < tEnd; b += 0.5) pz(B(b), ['D2', 'D2', 'Eb2', 'E2'][Math.floor(b / 2) % 4], 0.6, 0.2);
+    for (let t = T.pop - 1.5; t < tEnd; t += 0.0625) { const v = 0.12 + 0.45 * invLerp(T.pop - 1.5, tEnd, t); one(t, time => N.timp(time, v)); }
+    hold(T.pop - 3, 2.74, (time, into) => N.riser(time, into, 2.74));
+    for (const tc of CRACK_T.fastTicks) if (tc < tEnd) one(tc, time => N.crackle(time, 0.35 + 0.4 * Math.random()));
+    one(T.pop, time => N.pop(time));
+    mar(T.pop + 0.012, 'D3', 0.45); mar(T.pop + 0.012, 'A3', 0.4); mar(T.pop + 0.012, 'D4', 0.38);
+    ['A6', 'F#6', 'E6', 'D6', 'B5', 'A5'].forEach((n, i) => bell(T.pop + 0.14 + i * 0.13 + (i > 3 ? 0.06 : 0), n, 0.28 - i * 0.02, 1.4));
+    pz(T.land, 'A2', 0.8); mar(T.land + 0.01, 'A4', 0.45);
+    for (let i = 0; i < 6; i++) mar(T.land + 0.5 + i * 0.09, i % 2 ? 'B5' : 'C#6', 0.2);
+    hold(T.land + 0.25, T.grab - T.land - 0.25, (time, into) => N.padOn(['A2', 'D3', 'E3', 'A3'], time, into, T.grab - T.land - 0.25, 0.35));
+    hold(T.grab, T.feast - T.grab + 0.2, (time, into) => N.padOn(['A2', 'C#3', 'E3', 'A3'], time, into, T.feast - T.grab + 0.2, 0.4));
+    ['A3', 'B3', 'C#4'].forEach((n, i) => pz(T.grab - 0.9 + i * 0.28, n, 0.45));
+    mar(T.grab, 'E6', 0.55); mar(T.grab + 0.02, 'A5', 0.3);
+  }
+  // FEAST — the warm resolution: D major 9, the opening tune slowed right down.
+  {
+    const s = sceneById.feast, B = grid('feast'), long = s.end - s.start + 3;
+    hold(s.start, long, (time, into) => N.padOn(['D2', 'A2', 'F#3', 'A3', 'E4', 'C#5'], time, into, long, 0.64));
+    for (const [b, n] of [[0.5, 'F#5'], [1.5, 'A5'], [2.5, 'D6'], [4, 'A5'], [5, 'B5'], [6, 'A5'], [8, 'F#5'], [9, 'E5'], [10, 'D5']]) mar(B(b), n, 0.55);
+    mar(B(10), 'D4', 0.35);
+    pz(s.start, 'D2', 0.7); pz(B(4), 'A2', 0.55); pz(B(8), 'D2', 0.5);
+    for (const b of PLAN.bites) one(b, time => N.nibble(time));
+    const fa = T.fade + 1, fb = FILM_END + 0.35;
+    hold(fa, fb - fa, (time, into) => N.fadeOut(time, into, fb - fa));
+  }
+  return ev.sort((a, b) => a.t - b.t);
+}
+async function ensureAudio() {
+  if (AUDIO.ready) return true;
+  if (AUDIO.failed) return false;
+  if (!(await loadTone())) { AUDIO.failed = true; return false; }
+  try {
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    await window.Tone.start();
+    AUDIO.N = buildInstruments();
+    await AUDIO.N.ready;
+    AUDIO.score = buildScore(AUDIO.N);
+    const tr = window.Tone.getTransport();
+    for (const e of AUDIO.score) tr.schedule(time => e.fn(time, 0), e.t);
+    AUDIO.ready = true;
+  } catch (err) {
+    console.warn('Audio unavailable:', err);
+    AUDIO.failed = true;
+  }
+  return AUDIO.ready;
+}
+function audioSeek(offset, when) {
+  // Sustained events already under way at `offset` restart part-way through.
+  for (const e of AUDIO.score) if (e.sustain && e.t < offset - 1e-3 && offset < e.t + e.dur - 0.05) e.fn(when, offset - e.t);
+}
+
+/* ============================ player & UI ================================ */
+const $ = id => document.getElementById(id);
+const canvas = $('film');
+const ctx = canvas.getContext('2d', { alpha: false });
+const params = new URLSearchParams(location.search);
+const player = { ready: false, playing: false, recording: false, poster: true, req: 0, t: CONFIG.posterTime, mapA: 0, mapT: 0, perf0: 0, last: 0, dirty: true };
+const rec = { mr: null, chunks: [], mime: '', dest: null, keep: null, blob: null, ext: 'webm' };
+
+function audioClock() {
+  const raw = window.Tone.getContext().rawContext;
+  return raw.currentTime - (player.recording ? 0 : (raw.baseLatency || 0) + 0.02);
+}
+async function playFrom(t0) {
+  const req = ++player.req;
+  $('intro').hidden = true; player.poster = false;
+  hideToast();
+  const ok = await ensureAudio();
+  if (req !== player.req) return;                       // a newer Play/Seek arrived while audio was starting
+  if (ok) { window.Tone.getTransport().stop(); AUDIO.N.silence(); }
+  player.t = t0; player.mapT = t0; player.perf0 = performance.now(); player.last = player.perf0;
+  if (ok) {
+    const when = window.Tone.now() + 0.05;
+    audioSeek(t0, when);
+    window.Tone.getTransport().start(when, t0);
+    player.mapA = when;
+  }
+  player.playing = true; player.dirty = true;
+  syncUI();
+}
+function pause() {
+  player.req++;
+  if (!player.playing) return;
+  player.playing = false;
+  if (AUDIO.ready) { window.Tone.getTransport().stop(); AUDIO.N.silence(); }
+  syncUI();
+}
+function showPoster(hint) {
+  player.poster = true; player.t = CONFIG.posterTime; player.dirty = true;
+  $('intro').hidden = false; $('intro').querySelector('.hint').textContent = hint;
+}
+function finish() {
+  player.playing = false;
+  if (AUDIO.ready) { window.Tone.getTransport().stop(); AUDIO.N.silence(); }
+  if (player.recording) stopRecording(); else showPoster('Watch again');
+  syncUI();
+}
+function tick(now) {
+  requestAnimationFrame(tick);
+  if (!player.ready) return;
+  if (player.playing) {
+    const target = AUDIO.ready ? player.mapT + (audioClock() - player.mapA) : player.mapT + (now - player.perf0) / 1000;
+    const dt = Math.min(0.25, (now - player.last) / 1000); player.last = now;
+    player.frameDt = lerp(player.frameDt || 1 / 60, dt || 1 / 60, 0.1);
+    let t;
+    // While recording, frames are locked to the audio clock and drawn a couple of frames ahead,
+    // because the canvas capture reaches the recorder a few frames after we draw.
+    if (player.recording) t = target + clamp(2.5 * player.frameDt, 0.02, 0.12);
+    else if (!AUDIO.ready) t = target;
+    else { t = player.t + dt; const err = target - t; t = Math.abs(err) > 0.08 ? target : t + err * 0.25; }
+    player.t = Math.max(player.t, Math.max(player.mapT, t));
+    const stopAt = FILM_END + (player.recording ? CONFIG.recordTail : 0);
+    if (player.t >= stopAt) { player.t = FILM_END; finish(); }
+    player.dirty = true;
+  }
+  if (player.dirty) { render(ctx, Math.min(player.t, FILM_END)); player.dirty = false; }
+  updateClock();
+}
+
+// Recording: canvas frames + the Tone.js master output, muxed by MediaRecorder.
+function pickMime() {
+  if (!window.MediaRecorder) return null;
+  // H.264/AAC MP4 first (plays everywhere, including iPhone Photos), then whatever the browser offers.
+  const list = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.4d0028,mp4a.40.2', 'video/mp4;codecs=avc1.42e028,mp4a.40.2',
+    'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  return list.find(m => MediaRecorder.isTypeSupported(m)) || '';
+}
+async function startRecording() {
+  const mime = pickMime();
+  if (mime === null || !canvas.captureStream) { toast('This browser can’t record video. Try Chrome, Edge, Firefox or Safari 14.1+.'); return; }
+  const ok = await ensureAudio();
+  const tracks = [...canvas.captureStream(CONFIG.recordFps).getVideoTracks()];
+  if (ok) {
+    const raw = window.Tone.getContext().rawContext;
+    rec.dest = raw.createMediaStreamDestination();
+    AUDIO.N.out.connect(rec.dest);
+    // Chrome sends no audio frames while the graph is silent, and MediaRecorder then squeezes those
+    // gaps out of the audio track (sound drifts ahead of picture). A silent source keeps it flowing.
+    rec.keep = raw.createConstantSource(); rec.keep.offset.value = 0; rec.keep.connect(rec.dest); rec.keep.start();
+    tracks.push(...rec.dest.stream.getAudioTracks());
+  }
+  rec.chunks = []; rec.mime = mime; rec.ext = mime.includes('mp4') ? 'mp4' : 'webm';
+  try {
+    rec.mr = new MediaRecorder(new MediaStream(tracks), { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: CONFIG.recordVideoBps, audioBitsPerSecond: 160000 });
+  } catch (err) { toast('Recording failed to start: ' + err.message); return; }
+  rec.mr.ondataavailable = e => { if (e.data && e.data.size) rec.chunks.push(e.data); };
+  rec.mr.onstop = onRecorded;
+  rec.mr.start(1000);
+  player.recording = true;
+  $('recBadge').hidden = false;
+  toast('Recording the whole film — keep this tab in front.', 2600);
+  await playFrom(0);
+}
+function stopRecording() {
+  if (!player.recording) return;
+  player.recording = false;
+  if (rec.mr && rec.mr.state !== 'inactive') rec.mr.stop();
+  if (player.playing) pause();
+  $('recBadge').hidden = true;
+  syncUI();
+}
+async function onRecorded() {
+  if (rec.dest && AUDIO.ready) { try { AUDIO.N.out.disconnect(rec.dest); } catch (e) { /* already disconnected */ } }
+  if (rec.keep) { try { rec.keep.stop(); rec.keep.disconnect(); } catch (e) { /* already stopped */ } rec.keep = null; }
+  rec.blob = new Blob(rec.chunks, { type: rec.mime || 'video/webm' });
+  showPoster('Watch again');
+  syncUI();
+  await saveVideo();
+}
+const DOWNLOADS = window.claude && window.claude.use ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+async function saveVideo() {
+  if (!rec.blob) return;
+  const name = 'the-ant-and-the-melon.' + rec.ext;
+  const mb = (rec.blob.size / 1048576).toFixed(1);
+  const dl = await DOWNLOADS;
+  if (dl) {
+    try { await dl.save({ filename: name, data: rec.blob }); toast(`Saved ${name} (${mb} MB).`, 4000); return; }
+    catch (err) { toast(err && err.code === 'declined' ? 'Video not saved.' : 'Couldn’t save the video here.', 0, true); return; }
+  }
+  const url = URL.createObjectURL(rec.blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  toast(`Downloaded ${name} (${mb} MB).`, 5000, true);
+}
+let toastTimer = 0;
+function toast(msg, ms = 0, withSave = false) {
+  $('toastMsg').textContent = msg; $('toast').hidden = false; $('toastBtn').hidden = !withSave || !rec.blob;
+  clearTimeout(toastTimer); if (ms) toastTimer = setTimeout(hideToast, ms);
+}
+function hideToast() { $('toast').hidden = true; }
+
+// Scene timeline (tap a scene to jump to it).
+const segs = SCENES.map((s, i) => {
+  const b = document.createElement('button');
+  b.className = 'seg'; b.type = 'button'; b.style.flexGrow = s.end - s.start;
+  b.setAttribute('aria-label', `Scene ${i + 1}: ${s.label}, ${s.start}–${s.end} seconds`);
+  b.innerHTML = `<span>${s.label}</span><span class="trk"><i></i></span>`;
+  b.addEventListener('click', () => { if (player.ready && !player.recording) playFrom(s.start); });
+  $('timeline').appendChild(b);
+  return b;
+});
+function updateClock() {
+  const t = player.poster ? 0 : clamp(player.t, 0, FILM_END);
+  $('clock').textContent = `${t.toFixed(1)} / ${FILM_END.toFixed(1)}`;
+  SCENES.forEach((s, i) => {
+    segs[i].querySelector('i').style.width = (100 * invLerp(s.start, s.end, t)) + '%';
+    segs[i].classList.toggle('on', !player.poster && t >= s.start && t < s.end);
+  });
+  if (player.recording) $('recTime').textContent = 'REC ' + t.toFixed(1);
+}
+function syncUI() {
+  $('playLabel').textContent = player.playing ? 'Pause' : 'Play';
+  $('playBtn').setAttribute('aria-label', player.playing ? 'Pause' : 'Play');
+  $('playIcon').setAttribute('d', player.playing ? 'M6 4h4v16H6zM14 4h4v16h-4z' : 'M6 3.8c0-.9 1-1.5 1.8-1l13 8.2c.7.5.7 1.5 0 2L7.8 21.2c-.8.5-1.8-.1-1.8-1z');
+  $('recBtn').classList.toggle('on', player.recording);
+  $('recLabel').textContent = player.recording ? 'Stop' : 'Record';
+  $('playBtn').disabled = $('restartBtn').disabled = player.recording;
+}
+function togglePlay() {
+  if (!player.ready || player.recording) return;
+  if (player.playing) pause();
+  else playFrom(player.poster ? 0 : player.t);
+}
+$('intro').addEventListener('click', () => { if (window.Tone) window.Tone.start(); if (player.ready && !player.recording) playFrom(0); });
+$('playBtn').addEventListener('click', () => { if (window.Tone) window.Tone.start(); togglePlay(); });
+$('restartBtn').addEventListener('click', () => { if (window.Tone) window.Tone.start(); if (player.ready && !player.recording) playFrom(0); });
+$('recBtn').addEventListener('click', () => {
+  if (!player.ready) return;
+  if (window.Tone) window.Tone.start();
+  if (player.recording) stopRecording(); else startRecording();
+});
+$('toastBtn').addEventListener('click', saveVideo);
+window.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input, textarea')) return;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'r' || e.key === 'R') $('restartBtn').click();
+  else if (/^[1-9]$/.test(e.key) && SCENES[+e.key - 1] && player.ready && !player.recording) playFrom(SCENES[+e.key - 1].start);
+});
+
+function layout() {
+  const app = $('app'), cs = getComputedStyle(app);
+  const aw = app.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const ah = app.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - $('bar').offsetHeight - 12;
+  let h = Math.max(160, ah), w = h * 9 / 16;
+  if (w > aw) { w = aw; h = w * 16 / 9; }
+  $('stage').style.width = Math.floor(w) + 'px'; $('stage').style.height = Math.floor(h) + 'px';
+  $('bar').style.width = Math.floor(Math.max(w, Math.min(aw, 300))) + 'px';
+}
+window.addEventListener('resize', layout);
+layout();
+
+// Build the pencil passes a few at a time so the page stays responsive.
+async function init() {
+  PAPER = makePaper(); TOOTH = makeTooth(); VIGNETTE = makeVignette(ctx);
+  const jobs = [];
+  for (const L of Object.values(LAYERS)) for (let i = 0; i < L.passes; i++) jobs.push(() => L.render(i));
+  const still = params.has('t');
+  for (let i = 0; i < jobs.length; i++) {
+    jobs[i]();
+    $('loading').querySelector('i').style.width = (100 * (i + 1) / jobs.length) + '%';
+    if (!still) await new Promise(r => setTimeout(r, 0));
+  }
+  $('loading').hidden = true;
+  player.ready = true;
+  if (still) { player.t = clamp(parseFloat(params.get('t')) || 0, 0, FILM_END); document.body.dataset.still = '1'; }
+  else $('intro').hidden = false;
+  player.dirty = true;
+  render(ctx, player.t);
+  syncUI();
+}
+requestAnimationFrame(tick);
+const ready = init();
+// Hooks for automated checks: render any moment deterministically.
+window.__film = {
+  ready, SCENES, cue, render: t => render(ctx, t), plan: PLAN, crack: CRACK_T, audio: { buildInstruments, buildScore },
+  antScreen: t => { const P = antPose(t), c = camera(t); const dx = (P.x - c.x) * c.z, dy = (P.y - c.y) * c.z; return [W / 2 + dx * Math.cos(c.rot) - dy * Math.sin(c.rot), H / 2 + dx * Math.sin(c.rot) + dy * Math.cos(c.rot), c.z]; },
+};
+})();
+</script>
+</body>
+</html>
