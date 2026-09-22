@@ -185,7 +185,7 @@
 </div>
 
 <!-- Music engine. cdnjs first; jsDelivr is only a fallback if cdnjs is unreachable. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js" onerror="window.__toneFailed = true"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 
 <script>
 (() => {
@@ -222,6 +222,7 @@ const CONFIG = {
   boilPasses: 4,             // randomised hatch passes per layer that the boil shuffles between
   fadeColor: '#f1e6cf',      // end fade colour (paper). '#000000' fades to black instead.
   posterTime: 10.4,          // frame shown under the Play button
+  musicLevel: 1.5,           // overall music volume (1 = unity gain before the limiter)
   recordFps: 30,
   recordVideoBps: 8e6,
   recordTail: 0.8,           // seconds recorded after the end so the last chord rings out
@@ -1431,16 +1432,45 @@ function loadTone() {
     const s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js';
     s.onload = () => res(!!window.Tone); s.onerror = () => res(false);
-    document.head.appendChild(s);
-    setTimeout(() => res(!!window.Tone), 8000);
-  });
+    (document.head || document.documentElement).appendChild(s);
+    setTimeout(() => res(!!window.Tone), 15000);
+  }).then(ok => { if (!ok) AUDIO.loading = null; return ok; });    // allow a retry on the next Play
   return AUDIO.loading;
 }
+if (!window.Tone) loadTone();                                        // cdnjs didn't load: fetch the fallback now
+
+// Sound has to be unlocked synchronously inside the tap. On iPhone/iPad web audio is also muted
+// by the Silent switch unless the page asks for a playback session; a looping silent clip does
+// that on older iOS too.
+const SILENT_WAV = (() => {
+  const n = 800, b = new Uint8Array(44 + n), v = new DataView(b.buffer);
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) b[o + i] = str.charCodeAt(i); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44);
+  let str = ''; for (const x of b) str += String.fromCharCode(x);
+  return 'data:audio/wav;base64,' + btoa(str);
+})();
+let mediaKeepAlive = null;
+function unlockAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* not supported */ }
+  try {
+    if (!mediaKeepAlive) {
+      mediaKeepAlive = document.createElement('audio');
+      mediaKeepAlive.src = SILENT_WAV; mediaKeepAlive.loop = true; mediaKeepAlive.preload = 'auto';
+      mediaKeepAlive.setAttribute('playsinline', ''); mediaKeepAlive.setAttribute('x-webkit-airplay', 'deny');
+    }
+    const pr = mediaKeepAlive.play(); if (pr && pr.catch) pr.catch(() => {});
+  } catch (e) { /* media elements not available */ }
+  if (window.Tone) { try { AUDIO.resuming = window.Tone.start(); } catch (e) { /* checked after start */ } }
+}
+function releaseAudio() { if (mediaKeepAlive) mediaKeepAlive.pause(); }
 function buildInstruments() {
   const T = window.Tone;
-  const master = new T.Gain(0.9);
-  const comp = new T.Compressor({ threshold: -20, ratio: 2.6, attack: 0.01, release: 0.25 });
-  const limiter = new T.Limiter(-2);
+  const LEVEL = CONFIG.musicLevel;
+  const master = new T.Gain(LEVEL);
+  const comp = new T.Compressor({ threshold: -17, ratio: 3, attack: 0.006, release: 0.2 });
+  const limiter = new T.Limiter(-1.5);
   // Soft clipper after the limiter: transparent below 0.8, never reaches full scale.
   const out = new T.WaveShaper(x => (Math.abs(x) < 0.8 ? x : Math.sign(x) * (0.8 + 0.2 * Math.tanh((Math.abs(x) - 0.8) / 0.2))), 4096);
   master.chain(comp, limiter, out, T.getDestination());
@@ -1555,8 +1585,8 @@ function buildInstruments() {
     fadeOut(time, into, dur) {
       const p0 = clamp(into / dur), rem = Math.max(0.05, dur - into);
       master.gain.cancelScheduledValues(time);
-      master.gain.setValueAtTime(0.9 * (1 - p0), time);
-      master.gain.linearRampToValueAtTime(0.9 * (1 - p0) * 0.45, time + rem * 0.6);
+      master.gain.setValueAtTime(LEVEL * (1 - p0), time);
+      master.gain.linearRampToValueAtTime(LEVEL * (1 - p0) * 0.45, time + rem * 0.6);
       master.gain.linearRampToValueAtTime(0, time + rem);
     },
     silence() {
@@ -1564,7 +1594,7 @@ function buildInstruments() {
       for (const s of [marF, marO, bells, drone, pad, pluck]) s.releaseAll(now);
       try { if (rN.state === 'started') rN.stop(now); } catch (e) { /* already stopped */ }
       for (const p of [droneF.frequency, droneG.gain, rF.frequency, rG.gain, master.gain]) p.cancelScheduledValues(now);
-      droneG.gain.setValueAtTime(0, now); rG.gain.setValueAtTime(0, now); master.gain.setValueAtTime(0.9, now);
+      droneG.gain.setValueAtTime(0, now); rG.gain.setValueAtTime(0, now); master.gain.setValueAtTime(LEVEL, now);
     },
   };
   N.ready = reverb.ready || Promise.resolve();
@@ -1667,10 +1697,9 @@ function buildScore(N) {
 async function ensureAudio() {
   if (AUDIO.ready) return true;
   if (AUDIO.failed) return false;
-  if (!(await loadTone())) { AUDIO.failed = true; return false; }
+  if (!(await loadTone())) return false;
   try {
-    if (navigator.audioSession) navigator.audioSession.type = 'playback';
-    await window.Tone.start();
+    await Promise.race([window.Tone.start(), new Promise(r => setTimeout(r, 1500))]);
     AUDIO.N = buildInstruments();
     await AUDIO.N.ready;
     AUDIO.score = buildScore(AUDIO.N);
@@ -1693,7 +1722,7 @@ const $ = id => document.getElementById(id);
 const canvas = $('film');
 const ctx = canvas.getContext('2d', { alpha: false });
 const params = new URLSearchParams(location.search);
-const player = { ready: false, playing: false, recording: false, poster: true, req: 0, t: CONFIG.posterTime, mapA: 0, mapT: 0, perf0: 0, last: 0, dirty: true };
+const player = { ready: false, playing: false, recording: false, poster: true, audioClock: false, req: 0, t: CONFIG.posterTime, mapA: 0, mapT: 0, perf0: 0, last: 0, dirty: true };
 const rec = { mr: null, chunks: [], mime: '', dest: null, keep: null, blob: null, ext: 'webm' };
 
 function audioClock() {
@@ -1705,10 +1734,15 @@ async function playFrom(t0) {
   $('intro').hidden = true; player.poster = false;
   hideToast();
   const ok = await ensureAudio();
+  if (ok && window.Tone.getContext().state !== 'running') {    // resume() may still be settling
+    await Promise.race([AUDIO.resuming || Promise.resolve(), new Promise(r => setTimeout(r, 1200))]);
+  }
   if (req !== player.req) return;                       // a newer Play/Seek arrived while audio was starting
+  const live = ok && window.Tone.getContext().state === 'running';
   if (ok) { window.Tone.getTransport().stop(); AUDIO.N.silence(); }
   player.t = t0; player.mapT = t0; player.perf0 = performance.now(); player.last = player.perf0;
-  if (ok) {
+  player.audioClock = live;
+  if (live) {
     const when = window.Tone.now() + 0.05;
     audioSeek(t0, when);
     window.Tone.getTransport().start(when, t0);
@@ -1716,11 +1750,17 @@ async function playFrom(t0) {
   }
   player.playing = true; player.dirty = true;
   syncUI();
+  if (!ok) toast('The music didn’t load, so the film is playing without sound. Check your connection, then tap Restart.', 9000);
+  else if (!live) soundBlocked();
+}
+function soundBlocked() {
+  toast('The browser is holding the sound back.', 0, { label: 'Turn sound on', fn: () => { unlockAudio(); playFrom(player.t); } });
 }
 function pause() {
   player.req++;
   if (!player.playing) return;
   player.playing = false;
+  releaseAudio();
   if (AUDIO.ready) { window.Tone.getTransport().stop(); AUDIO.N.silence(); }
   syncUI();
 }
@@ -1730,6 +1770,7 @@ function showPoster(hint) {
 }
 function finish() {
   player.playing = false;
+  releaseAudio();
   if (AUDIO.ready) { window.Tone.getTransport().stop(); AUDIO.N.silence(); }
   if (player.recording) stopRecording(); else showPoster('Watch again');
   syncUI();
@@ -1738,14 +1779,21 @@ function tick(now) {
   requestAnimationFrame(tick);
   if (!player.ready) return;
   if (player.playing) {
-    const target = AUDIO.ready ? player.mapT + (audioClock() - player.mapA) : player.mapT + (now - player.perf0) / 1000;
+    if (player.audioClock && window.Tone.getContext().state !== 'running') {
+      // Audio got suspended (phone call, app switch…): keep the picture going and offer sound again.
+      player.audioClock = false; player.mapT = player.t; player.perf0 = now; soundBlocked();
+    } else if (!player.audioClock && AUDIO.ready && !player.resyncing && window.Tone.getContext().state === 'running') {
+      // Sound became available mid-film: bring the music in at the current moment.
+      player.resyncing = true; playFrom(player.t).finally(() => { player.resyncing = false; });
+    }
+    const target = player.audioClock ? player.mapT + (audioClock() - player.mapA) : player.mapT + (now - player.perf0) / 1000;
     const dt = Math.min(0.25, (now - player.last) / 1000); player.last = now;
     player.frameDt = lerp(player.frameDt || 1 / 60, dt || 1 / 60, 0.1);
     let t;
     // While recording, frames are locked to the audio clock and drawn a couple of frames ahead,
     // because the canvas capture reaches the recorder a few frames after we draw.
     if (player.recording) t = target + clamp(2.5 * player.frameDt, 0.02, 0.12);
-    else if (!AUDIO.ready) t = target;
+    else if (!player.audioClock) t = target;
     else { t = player.t + dt; const err = target - t; t = Math.abs(err) > 0.08 ? target : t + err * 0.25; }
     player.t = Math.max(player.t, Math.max(player.mapT, t));
     const stopAt = FILM_END + (player.recording ? CONFIG.recordTail : 0);
@@ -1787,8 +1835,8 @@ async function startRecording() {
   rec.mr.start(1000);
   player.recording = true;
   $('recBadge').hidden = false;
-  toast('Recording the whole film — keep this tab in front.', 2600);
   await playFrom(0);
+  if ($('toast').hidden) toast('Recording the whole film — keep this tab in front.', 2600);
 }
 function stopRecording() {
   if (!player.recording) return;
@@ -1814,17 +1862,18 @@ async function saveVideo() {
   const dl = await DOWNLOADS;
   if (dl) {
     try { await dl.save({ filename: name, data: rec.blob }); toast(`Saved ${name} (${mb} MB).`, 4000); return; }
-    catch (err) { toast(err && err.code === 'declined' ? 'Video not saved.' : 'Couldn’t save the video here.', 0, true); return; }
+    catch (err) { toast(err && err.code === 'declined' ? 'Video not saved.' : 'Couldn’t save the video here.', 0, { label: 'Save video', fn: saveVideo }); return; }
   }
   const url = URL.createObjectURL(rec.blob);
   const a = document.createElement('a');
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-  toast(`Downloaded ${name} (${mb} MB).`, 5000, true);
+  toast(`Downloaded ${name} (${mb} MB).`, 6000, { label: 'Save again', fn: saveVideo });
 }
-let toastTimer = 0;
-function toast(msg, ms = 0, withSave = false) {
-  $('toastMsg').textContent = msg; $('toast').hidden = false; $('toastBtn').hidden = !withSave || !rec.blob;
+let toastTimer = 0, toastAction = null;
+function toast(msg, ms = 0, action = null) {
+  $('toastMsg').textContent = msg; $('toast').hidden = false;
+  toastAction = action; $('toastBtn').hidden = !action; if (action) $('toastBtn').textContent = action.label;
   clearTimeout(toastTimer); if (ms) toastTimer = setTimeout(hideToast, ms);
 }
 function hideToast() { $('toast').hidden = true; }
@@ -1835,7 +1884,7 @@ const segs = SCENES.map((s, i) => {
   b.className = 'seg'; b.type = 'button'; b.style.flexGrow = s.end - s.start;
   b.setAttribute('aria-label', `Scene ${i + 1}: ${s.label}, ${s.start}–${s.end} seconds`);
   b.innerHTML = `<span>${s.label}</span><span class="trk"><i></i></span>`;
-  b.addEventListener('click', () => { if (player.ready && !player.recording) playFrom(s.start); });
+  b.addEventListener('click', () => { if (player.ready && !player.recording) { unlockAudio(); playFrom(s.start); } });
   $('timeline').appendChild(b);
   return b;
 });
@@ -1861,20 +1910,19 @@ function togglePlay() {
   if (player.playing) pause();
   else playFrom(player.poster ? 0 : player.t);
 }
-$('intro').addEventListener('click', () => { if (window.Tone) window.Tone.start(); if (player.ready && !player.recording) playFrom(0); });
-$('playBtn').addEventListener('click', () => { if (window.Tone) window.Tone.start(); togglePlay(); });
-$('restartBtn').addEventListener('click', () => { if (window.Tone) window.Tone.start(); if (player.ready && !player.recording) playFrom(0); });
+$('intro').addEventListener('click', () => { unlockAudio(); if (player.ready && !player.recording) playFrom(0); });
+$('playBtn').addEventListener('click', () => { if (!player.playing) unlockAudio(); togglePlay(); });
+$('restartBtn').addEventListener('click', () => { unlockAudio(); if (player.ready && !player.recording) playFrom(0); });
 $('recBtn').addEventListener('click', () => {
   if (!player.ready) return;
-  if (window.Tone) window.Tone.start();
-  if (player.recording) stopRecording(); else startRecording();
+  if (player.recording) stopRecording(); else { unlockAudio(); startRecording(); }
 });
-$('toastBtn').addEventListener('click', saveVideo);
+$('toastBtn').addEventListener('click', () => { const a = toastAction; hideToast(); if (a) a.fn(); });
 window.addEventListener('keydown', e => {
   if (e.target.closest && e.target.closest('input, textarea')) return;
-  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'Space') { e.preventDefault(); if (!player.playing) unlockAudio(); togglePlay(); }
   else if (e.key === 'r' || e.key === 'R') $('restartBtn').click();
-  else if (/^[1-9]$/.test(e.key) && SCENES[+e.key - 1] && player.ready && !player.recording) playFrom(SCENES[+e.key - 1].start);
+  else if (/^[1-9]$/.test(e.key) && SCENES[+e.key - 1] && player.ready && !player.recording) { unlockAudio(); playFrom(SCENES[+e.key - 1].start); }
 });
 
 function layout() {

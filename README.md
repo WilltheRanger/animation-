@@ -4,7 +4,12 @@ A 45-second hand-drawn short with an original score, built in a single file: `in
 (canvas + inline CSS/JS, music by [Tone.js](https://tonejs.github.io/) from cdnjs).
 
 Open `index.html` in a browser and tap **Play**. It needs a network connection once to load
-Tone.js; without it the film still plays, silently.
+Tone.js (cdnjs, with a jsDelivr fallback); without it the film still plays and a message says the
+music didn't load.
+
+No sound? Check the volume. On iPhone/iPad the page asks for a "playback" audio session, so
+Silent mode shouldn't mute it. If the browser still holds sound back, a **Turn sound on** button
+appears and the music comes in at the current moment.
 
 ## Controls
 
