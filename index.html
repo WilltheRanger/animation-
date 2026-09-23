@@ -220,7 +220,7 @@ const CONFIG = {
   W: 1080, H: 1920,          // canvas pixels (portrait 9:16)
   boilFps: 8,                // line boil: hatching is re-randomised this many times a second
   boilPasses: 4,             // randomised hatch passes per layer that the boil shuffles between
-  fadeColor: '#f1e6cf',      // end fade colour (paper). '#000000' fades to black instead.
+  fadeColor: '#ece0c6',      // end fade colour (paper). '#000000' fades to black instead.
   posterTime: 10.4,          // frame shown under the Play button
   musicLevel: 1.5,           // overall music volume (1 = unity gain before the limiter)
   recordFps: 30,
@@ -512,7 +512,7 @@ const contourAngle = (E, F) => Math.atan2(E.b * F.u * Math.cos(F.phi) / F.ring, 
 /* ------------------------------ paper ----------------------------------- */
 function makePaper() {
   const c = mkCanvas(W, H), g = c.getContext('2d'), rng = mulberry32(7);
-  g.fillStyle = '#f1e6cf'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#ece0c6'; g.fillRect(0, 0, W, H);
   for (let i = 0; i < 70; i++) {
     const x = rng() * W, y = rng() * H, r = 80 + rng() * 260;
     const gr = g.createRadialGradient(x, y, 0, x, y, r);
@@ -552,7 +552,7 @@ function makeTooth() {
 function makeVignette(g) {
   const gr = g.createRadialGradient(W / 2, H * 0.5, H * 0.28, W / 2, H * 0.5, H * 0.82);
   gr.addColorStop(0, 'rgba(70,45,20,0)');
-  gr.addColorStop(1, 'rgba(70,45,20,0.17)');
+  gr.addColorStop(1, 'rgba(70,45,20,0.22)');
   return gr;
 }
 
@@ -567,15 +567,22 @@ const hillY = x => 1170 + 16 * Math.sin(x * 0.0062 + 1.2) + 7 * vnoise(x * 0.021
 
 function buildSky(g, rng) {
   const box = { x0: 0, y0: 0, x1: W, y1: 1330 };
-  // Sky: loose, long strokes, cool at the top and warm near the horizon.
-  const sky = styles([['#a3bdc8', 2.8, 0.42], ['#b5cad1', 2.8, 0.42], ['#c9d8d6', 2.6, 0.4], ['#ecd3a0', 2.8, 0.4], ['#f2dcb4', 2.6, 0.4]], 6);
-  hatch(rng, box, { angle: -0.22, gap: 6.4, lenMin: 34, lenMax: 70, jitter: 0.07, spacing: 0.8 }, (x, y, r) => {
+  // Sky: a soft under-layer of broad pencil, then loose long strokes — cool at the top, warm at the horizon.
+  const skyWash = styles([['#a9bfca', 8, 0.2], ['#bccbcb', 8, 0.2], ['#e4cc9c', 8, 0.2]], 4);
+  hatch(rng, box, { angle: -0.22, gap: 9, lenMin: 50, lenMax: 90, jitter: 0.06, spacing: 0.6 }, (x, y, r) => {
+    if (y > fleshTopY(x) - 2 || inCloud(x, y) || Math.hypot(x - SUN.x, y - SUN.y) < SUN.r + 30) return null;
+    const warm = smooth(invLerp(520, 1150, y + (r() - 0.5) * 260));
+    return skyWash[warm > 0.5 ? 2 : (r() * 2) | 0];
+  });
+  const sky = styles([['#96b2c0', 2.8, 0.5], ['#a9c1cb', 2.8, 0.5], ['#bfcfcf', 2.6, 0.48], ['#e5c68f', 2.8, 0.48], ['#ecd3a4', 2.6, 0.48]], 6);
+  hatch(rng, box, { angle: -0.22, gap: 6, lenMin: 34, lenMax: 70, jitter: 0.07, spacing: 0.75 }, (x, y, r) => {
     if (y > fleshTopY(x) - 2 || inCloud(x, y) || Math.hypot(x - SUN.x, y - SUN.y) < SUN.r + 36) return null;
     const top = 1 - smooth(clamp(y / 1250));
-    if (r() > 0.05 + 0.62 * top * top) return null;
+    if (r() > 0.3 + 0.55 * top * top) return null;
     const warm = smooth(invLerp(560, 1150, y + (r() - 0.5) * 260));
     return sky[warm > 0.5 ? 3 + ((r() * 2) | 0) : (r() * 3) | 0];
   });
+  drawStyles(g, skyWash);
   // Distant field behind the melon.
   const field = styles([['#a3a86e', 2.1, 0.8], ['#8f9a5c', 2.1, 0.8], ['#b8b582', 2.0, 0.75], ['#7d8a4d', 1.8, 0.7]]);
   hatch(rng, { x0: 0, y0: 1130, x1: W, y1: 1330 }, { angle: -0.62, gap: 5.2, lenMin: 9, lenMax: 16 }, (x, y, r) => {
@@ -613,15 +620,18 @@ function buildSky(g, rng) {
     g.moveTo(SUN.x + Math.cos(a) * r0, SUN.y + Math.sin(a) * r0); g.lineTo(SUN.x + Math.cos(a) * r1, SUN.y + Math.sin(a) * r1);
   }
   g.stroke(); g.globalAlpha = 1;
-  // Clouds: paper-white shapes with scalloped pencil edges and shaded bellies.
-  const cshade = styles([['#b8c7c6', 2.0, 0.7], ['#c9d4cf', 2.0, 0.6]]);
+  // Clouds: white pencil fill, scalloped edges and shaded bellies.
+  const cwhite = styles([['#faf6ec', 3.2, 0.85], ['#f6f1e4', 3.2, 0.85]]);
+  const cshade = styles([['#aebfc1', 2.0, 0.72], ['#c1cdcb', 2.0, 0.65]]);
   for (const c of CLOUDS) {
-    hatch(rng, { x0: c.x - 200, y0: c.y - 130, x1: c.x + 200, y1: c.y + c.base }, { angle: -0.36, gap: 5, lenMin: 8, lenMax: 16 }, (x, y, r) => {
+    const cb = { x0: c.x - 200, y0: c.y - 130, x1: c.x + 200, y1: c.y + c.base };
+    hatch(rng, cb, { angle: -0.36, gap: 4, lenMin: 10, lenMax: 20 }, (x, y, r) => (inCloud(x, y) && r() < 0.92 ? cwhite[(r() * 2) | 0] : null));
+    hatch(rng, cb, { angle: -0.36, gap: 5, lenMin: 8, lenMax: 16 }, (x, y, r) => {
       if (!inCloud(x, y)) return null;
-      return r() < invLerp(c.y - 20, c.y + c.base, y) * 0.9 ? cshade[(r() * 2) | 0] : null;
+      return r() < invLerp(c.y - 24, c.y + c.base, y) * 0.95 ? cshade[(r() * 2) | 0] : null;
     });
   }
-  drawStyles(g, cshade);
+  drawStyles(g, cwhite); drawStyles(g, cshade);
   g.strokeStyle = '#8fa6a8'; g.lineWidth = 2.3; g.lineCap = 'round';
   for (const c of CLOUDS) {
     g.beginPath();
@@ -646,27 +656,40 @@ function buildMelon(g, rng) {
   g.save();
   g.beginPath(); g.ellipse(E.cx, E.cy, E.a, E.b, 0, 0, TAU); g.clip();
   const P = {
-    lightHi: styles([['#c3d98a', 2.4, 0.85], ['#b0cd73', 2.4, 0.85], ['#d9e6a6', 2.2, 0.85], ['#a5c466', 2.3, 0.85]]),
-    lightMid: styles([['#9dbf62', 2.4, 0.85], ['#8cb257', 2.4, 0.85], ['#abc970', 2.3, 0.85], ['#7fa64d', 2.3, 0.85]]),
-    lightLo: styles([['#739b45', 2.4, 0.85], ['#66903f', 2.4, 0.85], ['#7ea44f', 2.3, 0.85], ['#5a833a', 2.3, 0.85]]),
-    darkHi: styles([['#4b8a3a', 2.4, 0.88], ['#3f7c33', 2.4, 0.88], ['#58964a', 2.3, 0.85], ['#3a722f', 2.4, 0.88]]),
-    darkMid: styles([['#306a2b', 2.4, 0.88], ['#2a5f27', 2.4, 0.88], ['#3a7331', 2.3, 0.88], ['#244f22', 2.4, 0.88]]),
-    darkLo: styles([['#1f4a21', 2.4, 0.9], ['#1a3f1d', 2.4, 0.9], ['#27552a', 2.3, 0.9], ['#15361a', 2.4, 0.9]]),
-    sheen: styles([['#eef0c8', 2.2, 0.85], ['#e3ebb8', 2.2, 0.85], ['#f7f2d8', 2.0, 0.8]]),
+    washL: styles([['#a3c268', 6, 0.3], ['#90b659', 6, 0.3]], 3),
+    washLL: styles([['#6c9743', 6, 0.33], ['#5d893b', 6, 0.33]], 3),
+    washD: styles([['#2d6629', 6, 0.36], ['#265a24', 6, 0.36]], 3),
+    washDL: styles([['#1b441e', 6, 0.38], ['#17391a', 6, 0.38]], 3),
+    lightHi: styles([['#b1cf76', 2.4, 0.88], ['#9fc463', 2.4, 0.88], ['#c4dc8e', 2.2, 0.85], ['#94ba5a', 2.3, 0.88]]),
+    lightMid: styles([['#8cb454', 2.4, 0.88], ['#7ba74b', 2.4, 0.88], ['#9bbe60', 2.3, 0.88], ['#6f9c44', 2.3, 0.88]]),
+    lightLo: styles([['#628f3e', 2.4, 0.88], ['#578536', 2.4, 0.88], ['#6b9845', 2.3, 0.88], ['#4c7a31', 2.3, 0.88]]),
+    darkHi: styles([['#3f7f34', 2.4, 0.9], ['#35722f', 2.4, 0.9], ['#4a8a3d', 2.3, 0.88], ['#316a2b', 2.4, 0.9]]),
+    darkMid: styles([['#285f27', 2.4, 0.9], ['#225523', 2.4, 0.9], ['#306a2c', 2.3, 0.9], ['#1e4a20', 2.4, 0.9]]),
+    darkLo: styles([['#1a421d', 2.4, 0.92], ['#153719', 2.4, 0.92], ['#214d24', 2.3, 0.92], ['#112f16', 2.4, 0.92]]),
+    sheen: styles([['#dfe8b0', 2.2, 0.85], ['#d2e0a0', 2.2, 0.85], ['#e9ecc6', 2.0, 0.8]]),
     cross: styles([['#163a1c', 1.9, 0.72], ['#1d4521', 1.9, 0.72], ['#23502a', 1.8, 0.7]]),
     crossLt: styles([['#5f8a3e', 1.9, 0.6], ['#557f37', 1.9, 0.6]]),
     contour: styles([['#24552a', 2.0, 0.6], ['#1c4621', 2.0, 0.6]]),
     vein: styles([['#6d9646', 1.8, 0.55], ['#5e8a3d', 1.8, 0.55]]),
   };
   const box = MEL_BOX;
-  // 1. Base layer: diagonal strokes coloured by stripe + light.
-  hatch(rng, box, { angle: -0.93, gap: 5.2, lenMin: 11, lenMax: 21, jitter: 0.16 }, (x, y, r) => {
+  // 0. Under-layer: broad, soft pencil so little bare paper shows between the strokes.
+  hatch(rng, box, { angle: -0.93, gap: 6.5, lenMin: 18, lenMax: 32, jitter: 0.22, spacing: 0.55 }, (x, y, r) => {
     if (!ellField(E, x, y, F)) return null;
     stripeOf(F);
-    let tone = 0.12 + 0.95 * F.diff + (r() - 0.5) * 0.22;
+    const tone = 0.06 + 0.92 * F.diff + (r() - 0.5) * 0.2;
+    if (F.spec > 0.35 && r() < F.spec * 0.5) return null;
+    if (F.dark) return any(r, tone > 0.55 ? P.washD : P.washDL);
+    return any(r, tone > 0.55 ? P.washL : P.washLL);
+  });
+  // 1. Base layer: diagonal strokes coloured by stripe + light.
+  hatch(rng, box, { angle: -0.93, gap: 4.5, lenMin: 11, lenMax: 21, jitter: 0.16 }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    stripeOf(F);
+    let tone = 0.06 + 0.92 * F.diff + (r() - 0.5) * 0.22;
     if (F.edgeDist < 16) tone -= 0.1;
-    if (F.spec > 0.12 && r() < F.spec * 0.6) return r() < 0.4 ? null : any(r, P.sheen);
-    if (r() > 0.94) return null;
+    if (F.spec > 0.2 && r() < F.spec * 0.45) return r() < 0.25 ? null : any(r, P.sheen);
+    if (r() > 0.985) return null;
     if (F.dark) {
       if (F.edge < 0.02 && r() < 0.55) return any(r, P.darkLo);
       return any(r, tone > 0.74 ? P.darkHi : tone > 0.5 ? P.darkMid : P.darkLo);
@@ -677,8 +700,8 @@ function buildMelon(g, rng) {
   hatch(rng, box, { angle: 0.62, gap: 6.4, lenMin: 9, lenMax: 17, jitter: 0.18 }, (x, y, r) => {
     if (!ellField(E, x, y, F)) return null;
     stripeOf(F);
-    const shade = 1 - clamp(0.12 + 0.95 * F.diff);
-    const p = F.dark ? 0.2 + 0.7 * shade : Math.max(0, shade - 0.3) * 1.1;
+    const shade = 1 - clamp(0.06 + 0.92 * F.diff);
+    const p = F.dark ? 0.3 + 0.7 * shade : Math.max(0, shade - 0.2) * 1.2;
     if (r() > p - F.spec) return null;
     return any(r, F.dark ? P.cross : P.crossLt);
   });
@@ -689,15 +712,15 @@ function buildMelon(g, rng) {
   }, (x, y, r) => {
     if (!ellField(E, x, y, F)) return null;
     stripeOf(F);
-    if (F.dark) return r() < 0.32 - F.spec ? any(r, P.contour) : null;
-    return r() < 0.06 ? any(r, P.vein) : null;
+    if (F.dark) return r() < 0.42 - F.spec ? any(r, P.contour) : null;
+    return r() < 0.1 ? any(r, P.vein) : null;
   });
-  for (const k of ['lightLo', 'lightMid', 'lightHi', 'darkLo', 'darkMid', 'darkHi', 'sheen', 'crossLt', 'cross', 'vein', 'contour']) drawStyles(g, P[k]);
+  for (const k of ['washL', 'washLL', 'washD', 'washDL', 'lightLo', 'lightMid', 'lightHi', 'darkLo', 'darkMid', 'darkHi', 'sheen', 'crossLt', 'cross', 'vein', 'contour']) drawStyles(g, P[k]);
   g.restore();
   // Silhouette: a glossy rim-light just inside, then a double pencil contour.
   const top = [], rim = [];
   for (let x = box.x0; x <= box.x1; x += 12) { top.push([x, ellipseY(E, x)]); rim.push([x, ellipseY(E, x) + 7]); }
-  sketchLine(g, rim, rng, 1.6, '#e2ecb2', 2.2, 0.55);
+  sketchLine(g, rim, rng, 1.6, '#d7e4a4', 2.2, 0.4);
   sketchLine(g, top, rng, 1.4, '#16301a', 3.4, 0.9);
   sketchLine(g, top, rng, 2.2, '#1f3d1f', 1.6, 0.6);
 }
@@ -748,44 +771,51 @@ function buildFlesh(g, rng) {
   g.save();
   fleshClip(g); g.clip();
   const P = {
-    hi: styles([['#ef6f5d', 2.4, 0.88], ['#f28470', 2.4, 0.88], ['#e8604f', 2.4, 0.88], ['#f59a85', 2.2, 0.85]]),
-    mid: styles([['#dd4b3f', 2.4, 0.88], ['#d6433a', 2.4, 0.88], ['#e35a4a', 2.4, 0.88], ['#cf3d37', 2.4, 0.88]]),
-    lo: styles([['#b8323a', 2.4, 0.9], ['#a92c35', 2.4, 0.9], ['#c23a3c', 2.4, 0.9], ['#962532', 2.4, 0.9]]),
-    pale: styles([['#f7b3a0', 2.2, 0.85], ['#f9c7b6', 2.2, 0.85], ['#fbd9cc', 2.0, 0.8]]),
+    wash: styles([['#d54a40', 6, 0.34], ['#c53f3b', 6, 0.34]], 3),
+    washLo: styles([['#a72d35', 6, 0.36], ['#962733', 6, 0.36]], 3),
+    hi: styles([['#e45a4b', 2.4, 0.9], ['#e86c5a', 2.4, 0.9], ['#df5041', 2.4, 0.9], ['#ec8068', 2.2, 0.88]]),
+    mid: styles([['#d0413a', 2.4, 0.9], ['#c9393a', 2.4, 0.9], ['#d64d42', 2.4, 0.9], ['#c23536', 2.4, 0.9]]),
+    lo: styles([['#a82b35', 2.4, 0.92], ['#9a2531', 2.4, 0.92], ['#b3313a', 2.4, 0.92], ['#8a2130', 2.4, 0.92]]),
+    pale: styles([['#f29a86', 2.2, 0.85], ['#f4ab98', 2.2, 0.85], ['#f7c2b2', 2.0, 0.8]]),
     fiber: styles([['#b02c35', 1.8, 0.5], ['#c03a3d', 1.8, 0.5], ['#9d2631', 1.8, 0.5]]),
     cross: styles([['#8f2230', 1.8, 0.65], ['#a0293a', 1.8, 0.65]]),
     spark: styles([['#fff3ea', 1.8, 0.9], ['#ffe4d8', 1.8, 0.85]]),
   };
   const box = RED_BOX;
-  hatch(rng, box, { angle: -0.93, gap: 4.6, lenMin: 10, lenMax: 20, jitter: 0.18 }, (x, y, r) => {
+  hatch(rng, box, { angle: -0.93, gap: 6.5, lenMin: 18, lenMax: 32, jitter: 0.22, spacing: 0.55 }, (x, y, r) => {
+    if (!ellField(E, x, y, F)) return null;
+    if (F.spec > 0.35 && r() < F.spec * 0.5) return null;
+    return any(r, 0.06 + 0.92 * F.diff + (r() - 0.5) * 0.2 > 0.5 ? P.wash : P.washLo);
+  });
+  hatch(rng, box, { angle: -0.93, gap: 4.2, lenMin: 10, lenMax: 20, jitter: 0.18 }, (x, y, r) => {
     if (!ellField(E, x, y, F)) return null;
     const depth = y - fleshTopY(x);
-    let tone = 0.12 + 0.95 * F.diff + (r() - 0.5) * 0.24;
-    if (F.spec > 0.12 && r() < F.spec * 0.55) return r() < 0.4 ? null : any(r, P.pale);
-    if (r() > 0.95) return null;
-    if (depth < 8 && r() < 0.5) return any(r, P.pale);
+    let tone = 0.06 + 0.92 * F.diff + (r() - 0.5) * 0.24;
+    if (F.spec > 0.2 && r() < F.spec * 0.4) return r() < 0.25 ? null : any(r, P.pale);
+    if (r() > 0.985) return null;
+    if (depth < 6 && r() < 0.4) return any(r, P.pale);
     return any(r, tone > 0.74 ? P.hi : tone > 0.5 ? P.mid : P.lo);
   });
   // Juicy fibres radiating from the melon's core.
   hatch(rng, box, { angle: 0, gap: 7, lenMin: 14, lenMax: 30, jitter: 0.12, angleAt: (x, y) => Math.atan2(y - E.cy, x - E.cx) }, (x, y, r) => {
     if (!ellField(E, x, y, F)) return null;
-    return r() < 0.16 ? any(r, P.fiber) : null;
+    return r() < 0.2 ? any(r, P.fiber) : null;
   });
   hatch(rng, box, { angle: 0.6, gap: 6.6, lenMin: 8, lenMax: 16, jitter: 0.2 }, (x, y, r) => {
     if (!ellField(E, x, y, F)) return null;
-    return r() < Math.max(0, 0.62 - F.diff) * 0.9 ? any(r, P.cross) : null;
+    return r() < Math.max(0, 0.7 - F.diff) ? any(r, P.cross) : null;
   });
   // Crystalline sparkle.
   hatch(rng, box, { angle: -0.6, gap: 9, lenMin: 3, lenMax: 6, jitter: 1.2 }, (x, y, r) => {
     if (!ellField(E, x, y, F)) return null;
-    return r() < 0.05 + F.spec * 0.4 ? any(r, P.spark) : null;
+    return r() < 0.025 + F.spec * 0.25 ? any(r, P.spark) : null;
   });
-  for (const k of ['lo', 'mid', 'hi', 'pale', 'fiber', 'cross', 'spark']) drawStyles(g, P[k]);
+  for (const k of ['wash', 'washLo', 'lo', 'mid', 'hi', 'pale', 'fiber', 'cross', 'spark']) drawStyles(g, P[k]);
   for (const s of SEEDS) drawSeed(g, s, rng);
   g.restore();
   const top = [], rim = [];
   for (let x = box.x0; x <= box.x1; x += 10) { top.push([x, fleshTopY(x)]); rim.push([x, fleshTopY(x) + 6]); }
-  sketchLine(g, rim, rng, 1.6, '#fbd0c2', 2.2, 0.6);
+  sketchLine(g, rim, rng, 1.6, '#f6c1b1', 2.2, 0.45);
   sketchLine(g, top, rng, 1.4, '#7d1f26', 3.0, 0.9);
   // Juice beads along the broken surface.
   g.fillStyle = '#f4a291';
@@ -1290,7 +1320,7 @@ function drawHalves(g, t, tick) {
     g.save();
     g.translate(PIVOT[0] + side * 26 * easeOut3(clamp(u / 0.3)), PIVOT[1]); g.rotate(side * th); g.translate(-PIVOT[0], -PIVOT[1]);
     g.save(); g.beginPath(); polyPath(g, POLYS[side]); g.clip();
-    g.fillStyle = '#efe4cc'; g.beginPath(); g.ellipse(MELON.cx, MELON.cy, MELON.a, MELON.b, 0, 0, TAU); g.fill();
+    g.fillStyle = '#e6dac0'; g.beginPath(); g.ellipse(MELON.cx, MELON.cy, MELON.a, MELON.b, 0, 0, TAU); g.fill();
     LAYERS.melon.draw(g, tick); g.restore();
     // The cut edge of the rind shell: pale rind, with a blush of flesh where it tore away.
     if (band > 0.5) {
@@ -1417,7 +1447,7 @@ function render(ctx, t) {
   if (P.seed && t < T.grab) { const s = P.seed; P.seed = null; drawAnt(ctx, P, tick); P.seed = s; } else drawAnt(ctx, P, tick);
   drawParticles(ctx, t, tick);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalAlpha = 0.55; ctx.drawImage(TOOTH, -(hash3(tick, 99) % 64), -(hash3(tick, 98) % 64)); ctx.globalAlpha = 1;
+  ctx.globalAlpha = 0.4; ctx.drawImage(TOOTH, -(hash3(tick, 99) % 64), -(hash3(tick, 98) % 64)); ctx.globalAlpha = 1;
   ctx.fillStyle = VIGNETTE; ctx.fillRect(0, 0, W, H);
   const f = Math.max(1 - smooth(clamp(t / 0.6)), smooth(invLerp(T.fade, FILM_END, t)));
   if (f > 0.002) { ctx.globalAlpha = f; ctx.fillStyle = CONFIG.fadeColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
