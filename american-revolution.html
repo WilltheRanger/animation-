@@ -6645,6 +6645,166 @@ SCORE.treaty = (K, { B, b, s, dur, mel }) => {
   strH(B(21), s.end - B(21) + 0.3, ['G3', 'B3', 'D4', 'G4'], 0.3);
 };
 
+/* ===================== scene 28 — Washington resigns, 1783 ==================== */
+// The Senate chamber at Annapolis, winter light through tall windows. Washington reads his
+// farewell, hands his commission to the President of Congress, bows, and leaves; the ladies
+// in the gallery weep and wave.
+const FAR_LIGHT = { tint: '#e8e4dc', amt: 0.06, dark: 0.02, ink: '#221a14', dir: [0.7, -0.7] };
+Object.assign(OUTFITS, {
+  delegateHatA: { ...OUTFITS.delegateD, hat: 'tricorn', hatCol: '#1f1c1a' },
+  delegateHatB: { ...OUTFITS.delegateB, hat: 'tricorn', hatCol: '#26221e' },
+  mifflin: { ...OUTFITS.delegateE, coat: '#3a3f52', breeches: '#3a3f52' },
+});
+const FAR = (() => {
+  const s0 = sceneById.farewell.start, B = beatOf('farewell'), T = { hand: cue('farewell', 'hand') };
+  T.fold = T.hand - 1.0; T.step = T.hand - 0.5; T.back = T.hand + 0.6; T.bow = T.hand + 1.4; T.turn = T.hand + 3.6;
+  return { s0, B, T, floor: 1600, dais: 1500, wins: [[150, 330], [610, 790]], winY: [640, 1300] };
+})();
+function* buildFarewellRoom(g, rng) {
+  const L = FAR_LIGHT, box = { x0: -60, y0: 180, x1: 1140, y1: 2140 }, F = FAR;
+  const inWin = (x, y) => F.wins.some(([a, b]) => x > a && x < b && y < F.winY[1] && (y > F.winY[0] + (b - a) / 2 || Math.hypot(x - (a + b) / 2, y - F.winY[0] - (b - a) / 2) < (b - a) / 2));
+  // Plaster walls, brushed upward, brighter round the windows.
+  g.fillStyle = '#d2cab6'; g.fillRect(box.x0, 540, box.x1 - box.x0, 1000);
+  yield* pencilG(g, rng, { x0: box.x0, y0: 540, x1: box.x1, y1: 1540 }, (x, y) => !inWin(x, y), (x, y) => clamp(0.55 + 0.25 * Math.max(...F.wins.map(([a, b]) => Math.exp(-Math.abs(x - (a + b) / 2) / 260))) - 0.15 * smooth(clamp((y - 1200) / 340)) + 0.05 * fbm(x * 0.01, y * 0.005, 2801)), ['#a89e88', '#bab29c', '#cbc4b0', '#dad4c2', '#e6e2d4'].map(c => lit(c, L)),
+    { angle: -1.52, flow: FLOW.noise(-1.52, 0.1, 0.004, 2801), curve: 0.15, gap: 3.4, len: [30, 64], crossAngle: -0.3, crossAmt: 0.2, washAlpha: 0.4 });
+  // The windows: small panes of pale winter sky between the muntins.
+  for (const [a, b] of F.wins) {
+    const P = archWin(a, F.winY[0], b, F.winY[1]);
+    g.fillStyle = '#e9ecea'; g.beginPath(); polyPath(g, P); g.fill();
+    yield* pencilG(g, rng, bboxOf(P), (x, y) => inPoly(P, x, y), (x, y) => clamp(0.55 + 0.4 * (y - F.winY[0]) / 660), ['#b8c4cc', '#ccd6da', '#dfe5e4', '#f0f2ec'], { angle: 0.6, gap: 3.4, len: [14, 26], cross: false, wash: false });
+    g.strokeStyle = lit('#f4f0e4', L); g.lineWidth = 7; g.beginPath();
+    for (let x = a + (b - a) / 3; x < b - 5; x += (b - a) / 3) { g.moveTo(x, F.winY[0] + 20); g.lineTo(x, F.winY[1]); }
+    for (let y = F.winY[0] + (b - a) / 2 + 60; y < F.winY[1]; y += 74) { g.moveTo(a, y); g.lineTo(b, y); }
+    g.stroke();
+    sketchLine(g, P.concat([P[0]]), rng, 0.8, lit('#8a8272', L), 10, 0.9);
+    sketchLine(g, P.concat([P[0]]), rng, 0.8, L.ink, 1.6, 0.8);
+  }
+  // Pilasters with fluting.
+  for (const x of [470, 950]) {
+    g.fillStyle = lit('#e2dccc', L); g.fillRect(x - 38, 560, 76, 980);
+    g.strokeStyle = lit('#b0a890', L); g.lineWidth = 2; g.beginPath(); for (let k = -2; k <= 2; k++) { g.moveTo(x + k * 12, 600); g.lineTo(x + k * 12, 1280); } g.stroke();
+    sketchLine(g, [[x - 38, 1540], [x - 38, 560], [x + 38, 560], [x + 38, 1540]], rng, 0.6, L.ink, 1.6, 0.8);
+  }
+  // Wainscot panels.
+  g.fillStyle = lit('#c4bba4', L); g.fillRect(box.x0, 1330, box.x1 - box.x0, 210);
+  for (let x = box.x0 + 20; x < box.x1; x += 150) sketchLine(g, [[x, 1360], [x + 120, 1360], [x + 120, 1510], [x, 1510], [x, 1360]], rng, 0.6, lit('#8a8270', L), 2, 0.8);
+  sketchLine(g, [[box.x0, 1330], [box.x1, 1330]], rng, 0.6, L.ink, 2.4, 0.8);
+  // The gallery: shadowy, above.
+  g.fillStyle = lit('#6e6656', L); g.fillRect(box.x0, box.y0, box.x1 - box.x0, 360);
+  yield* pencilG(g, rng, { x0: box.x0, y0: box.y0, x1: box.x1, y1: 540 }, () => true, (x, y) => clamp(0.35 + 0.2 * (y - box.y0) / 360), ['#4a4238', '#5a5246', '#6e6656', '#827a68'].map(c => lit(c, L)), { angle: 0.02, gap: 3.2, len: [26, 54], crossAngle: 1.5, crossAmt: 0.3 });
+  // Floorboards running away from us, a red carpet up to the dais.
+  const vp = [560, 980], fl = 1540;
+  g.fillStyle = lit('#6a4a30', L); g.fillRect(box.x0, fl, box.x1 - box.x0, box.y1 - fl);
+  yield* pencilG(g, rng, { x0: box.x0, y0: fl, x1: box.x1, y1: box.y1 }, () => true, (x, y) => clamp(0.45 + 0.12 * Math.sin((x - vp[0]) / (y - vp[1]) * 30) + 0.08 * fbm(x * 0.01, y * 0.01, 2802)), ['#4a3020', '#5a3c28', '#6e4c32', '#84603e', '#9a7450'].map(c => lit(c, L)),
+    { flow: FLOW.toward(vp[0], vp[1]), curve: 0.05, gap: 3, len: [26, 60], crossAngle: 0, crossAmt: 0.25 });
+  const rug = [[330, fl], [700, fl], [900, box.y1], [120, box.y1]];
+  g.fillStyle = lit('#7a2a24', L); g.beginPath(); polyPath(g, rug); g.fill();
+  yield* pencilG(g, rng, bboxOf(rug), (x, y) => inPoly(rug, x, y), () => 0.5, ['#5a1c18', '#6e2420', '#842e28', '#9a3a30'].map(c => lit(c, L)), { angle: 0.785, gap: 3, len: [10, 20], crossAngle: -0.785, crossAmt: 0.8 });
+  sketchLine(g, rug, rng, 0.8, lit('#c8a456', L), 3, 0.7);
+  // The dais at the right.
+  const D = [[720, 1500], [1140, 1500], [1140, 1570], [700, 1570]];
+  g.fillStyle = lit('#5a3a22', L); g.beginPath(); polyPath(g, D); g.fill();
+  yield* pencilG(g, rng, bboxOf(D), (x, y) => inPoly(D, x, y), (x, y) => clamp(0.6 - (y - 1500) / 140), ['#3e2616', '#52341e', '#684428', '#7e5634'].map(c => lit(c, L)), { angle: 0, gap: 2.6, len: [20, 40], cross: false });
+  sketchLine(g, D.concat([D[0]]), rng, 0.8, L.ink, 2, 0.9);
+}
+function* buildFarewellDesk(g, rng) {
+  const L = FAR_LIGHT, P = [[770, 1330], [1060, 1330], [1066, 1500], [764, 1500]];
+  g.fillStyle = lit('#2e5a3c', L); g.beginPath(); polyPath(g, P); g.fill();
+  // Green baize cloth, hanging in soft folds.
+  yield* pencilG(g, rng, bboxOf(P), (x, y) => inPoly(P, x, y), (x, y) => clamp(0.5 + 0.25 * Math.sin((x - 770) * 0.05) - 0.2 * (y - 1330) / 170), ['#1e3a28', '#264a32', '#30583c', '#3e6a48', '#4e7c56'].map(c => lit(c, L)), { angle: -1.57, flow: (x) => -1.57 + 0.08 * Math.sin((x - 770) * 0.05), curve: 0.2, gap: 2.6, len: [16, 36], cross: false });
+  g.fillStyle = lit('#c8a456', L); g.fillRect(764, 1484, 302, 8);
+  sketchLine(g, P.concat([P[0]]), rng, 0.8, L.ink, 2, 0.9);
+  // Papers and an inkstand on top.
+  g.fillStyle = '#efe6cf'; g.fillRect(800, 1318, 90, 12); g.fillStyle = '#2a2420'; g.fillRect(980, 1306, 30, 24); g.fillStyle = '#c8a456'; g.fillRect(976, 1326, 38, 5);
+}
+const FAR_LAYERS = {
+  room: new BoilLayer({ name: 'farewellRoom', box: { x0: -60, y0: 180, x1: 1140, y1: 2140 }, res: 0.62, seed: 2803, build: buildFarewellRoom }),
+  desk: new BoilLayer({ name: 'farewellDesk', box: { x0: 760, y0: 1300, x1: 1070, y1: 1500 }, res: 0.9, seed: 2804, build: buildFarewellDesk }),
+};
+// The folded commission: a slim packet with a red seal.
+function drawCommission(g, x, y, ang, L) {
+  g.save(); g.translate(x, y); g.rotate(ang);
+  g.fillStyle = '#efe6cf'; g.fillRect(-30, -14, 60, 28); g.strokeStyle = L.ink; g.lineWidth = 1.6; g.strokeRect(-30, -14, 60, 28);
+  g.strokeStyle = '#b8a888'; g.beginPath(); g.moveTo(-30, 0); g.lineTo(30, 0); g.stroke();
+  g.fillStyle = '#9e2a22'; g.beginPath(); g.arc(8, 4, 6, 0, TAU); g.fill();
+  g.restore();
+}
+function drawFarewell(g, t, lt, tick) {
+  const F = FAR, T = F.T, L = FAR_LIGHT;
+  FAR_LAYERS.room.draw(g, tick);
+  // Ladies in the gallery, behind the balustrade: moved, then waving handkerchiefs.
+  const ladies = [[120, 'womanB', 0], [250, 'womanD', 1], [390, 'womanA', 2], [540, 'womanC', 3], [690, 'womanB', 4]];
+  for (const [x, o, i] of ladies) {
+    const P = basePose(), weep = smooth(invLerp(T.bow + i * 0.2, T.bow + 0.8 + i * 0.2, t)), wave = smooth(invLerp(T.turn + i * 0.15, T.turn + 0.6 + i * 0.15, t));
+    P.lean = 0.12; P.head = 0.18;
+    if (i % 2 === 0 && weep > 0) { P.nh = lerp2(P.nh, [16, -168], weep * (1 - wave)); P.ne = [-1, 0.4]; P.head = 0.18 + 0.15 * weep; }
+    if (wave > 0) { P.nh = lerp2(P.nh, [22 + 10 * Math.sin(t * 9 + i), -206], wave); P.ne = [-1, -0.3]; }
+    const f = drawFigure(g, { x, y: 560, s: 1.12, dir: 1, outfit: o, seed: 2810 + i, light: L }, P, tick);
+    if (wave > 0) { g.fillStyle = '#f6f2e8'; g.beginPath(); g.moveTo(f.hand[0], f.hand[1]); g.lineTo(f.hand[0] + 22 + 6 * Math.sin(t * 9 + i), f.hand[1] - 8); g.lineTo(f.hand[0] + 16, f.hand[1] + 18 + 5 * Math.sin(t * 7 + i)); g.closePath(); g.fill(); }
+  }
+  // The balustrade in front of them, and the gallery's fascia.
+  g.fillStyle = lit('#e6e0d0', L); g.fillRect(-60, 455, 1200, 16); g.fillRect(-60, 528, 1200, 14);
+  for (let x = -50; x < 1140; x += 28) { g.fillStyle = lit('#dcd4c0', L); g.beginPath(); g.moveTo(x - 5, 471); g.quadraticCurveTo(x - 12, 500, x - 5, 528); g.lineTo(x + 5, 528); g.quadraticCurveTo(x + 12, 500, x + 5, 471); g.closePath(); g.fill(); g.strokeStyle = lit('#9a927e', L); g.lineWidth = 1.2; g.stroke(); }
+  g.fillStyle = lit('#c8c0aa', L); g.fillRect(-60, 542, 1200, 34); g.strokeStyle = L.ink; g.lineWidth = 1.8; g.beginPath(); for (const y of [455, 542, 576]) { g.moveTo(-60, y); g.lineTo(1140, y); } g.stroke();
+  // Winter light falling across the room, dust turning in it.
+  g.save(); g.globalCompositeOperation = 'lighter';
+  for (const [a, b] of F.wins) { g.fillStyle = 'rgba(255,248,230,0.06)'; g.beginPath(); g.moveTo(a, F.winY[0] + 60); g.lineTo(b, F.winY[0] + 60); g.lineTo(b + 420, 1900); g.lineTo(a + 300, 1900); g.closePath(); g.fill(); }
+  g.fillStyle = 'rgba(255,250,236,0.6)';
+  for (let k = 0; k < 50; k++) { const r = mulberry32(hash3(k, 2805)), w = F.wins[k % 2], u = r(), v = (r() + lt * 0.015 * (0.5 + r())) % 1; const x = lerp(lerp(w[0], w[1], u), lerp(w[0] + 300, w[1] + 420, u), v) + 8 * Math.sin(lt * 0.6 + k), y = lerp(F.winY[0] + 60, 1900, v); g.globalAlpha = 0.3 + 0.3 * Math.sin(lt * 1.2 + k); g.fillRect(x, y, 2.4, 2.4); }
+  g.restore();
+  // Mifflin rises behind the desk to take the commission.
+  const rise = smooth(invLerp(T.step - 0.4, T.hand - 0.1, t)) * (1 - 0.6 * smooth(invLerp(T.hand + 1.4, T.hand + 2.4, t)));
+  const reach = smooth(invLerp(T.step, T.hand, t)) * (1 - smooth(invLerp(T.hand + 0.3, T.hand + 0.9, t)));
+  const MP = mixPose(seatPose({ lean: 0.05, head: 0.05 }), basePose(), rise); MP.lean = 0.05 + 0.4 * reach; MP.nh = lerp2([30, -70], [72, -118], reach); MP.ne = [-0.6, 1]; MP.fh = [20, -60]; MP.fe = [-1, 0.5];
+  const mf = drawFigure(g, { x: 930, y: F.dais, s: 1.8, dir: -1, outfit: 'mifflin', seed: 2806, light: L, seatedHide: rise < 0.5 }, MP, tick);
+  FAR_LAYERS.desk.draw(g, tick);
+  // Seated delegates keep their hats on; they touch the brims when he bows.
+  for (const [x, o, sd] of [[70, 'delegateHatA', 2807], [230, 'delegateHatB', 2808]]) {
+    const P = seatPose({ lean: 0.06, head: 0.08 }), tip = pulse(t, T.bow + 0.5, 0.35, 0.6);
+    P.nh = lerp2(P.nh, [22, -196], tip); P.ne = [-1, lerp(0.6, -0.4, tip)];
+    drawChair(g, x, F.floor + 40, 1.95, 1, L, tick);
+    drawFigure(g, { x, y: F.floor + 40, s: 1.95, dir: 1, outfit: o, seed: sd, light: L }, P, tick);
+  }
+  // Washington: reads, folds the paper, steps up, gives up his commission, bows, and goes.
+  const hs = 1.9;
+  let wx = 520, wdir = 1, WP;
+  const step = smooth(invLerp(T.step, T.hand - 0.05, t)), back = smooth(invLerp(T.back, T.back + 0.7, t));
+  wx = lerp(520, lerp(640, 560, back), step);
+  if (t < T.turn) {
+    WP = (step > 0 && step < 1) || (back > 0 && back < 1) ? walkPose(Math.abs(wx - 520) / hs) : basePose();
+    const read = 1 - smooth(invLerp(T.fold, T.fold + 0.5, t)), give = smooth(invLerp(T.step, T.hand, t)) * (1 - smooth(invLerp(T.hand + 0.2, T.hand + 0.6, t)));
+    WP.nh = lerp2(lerp2([26, -96], [30, -128], read), [72, -120], give); WP.fh = lerp2([2, -92], [26, -126], read); WP.ne = WP.fe = [-1, 0.5]; WP.head = 0.16 * read + 0.03 * Math.sin(lt * 1.3);
+    const bow = pulse(t, T.bow + 0.5, 0.5, 0.7); WP.lean += 0.42 * bow; WP.head += 0.3 * bow;
+  } else {
+    const w = smooth(invLerp(T.turn + 0.2, durOf('farewell') + F.s0 - 0.2, t)); wdir = -1; wx = lerp(560, 60, w); WP = walkPose((560 - wx) / hs);
+  }
+  const wo = drawFigure(g, { x: wx, y: F.floor, s: hs, dir: wdir, outfit: 'washington', seed: 2809, light: L }, WP, tick);
+  // His speech in both hands, then the commission passing over.
+  if (t < T.fold + 0.5) { const h = lerp2(wo.hand, wo.farHand, 0.5); g.save(); g.translate(h[0] + 6, h[1] - 30); g.rotate(-0.08); g.fillStyle = '#f2ead6'; g.fillRect(-26, -40 * (1 - smooth(invLerp(T.fold, T.fold + 0.5, t))) - 4, 52, 80 * (1 - 0.7 * smooth(invLerp(T.fold, T.fold + 0.5, t))) + 4); g.strokeStyle = '#4a3a2a'; g.lineWidth = 1.4; g.strokeRect(-26, -44, 52, 84); g.restore(); }
+  if (t > T.fold + 0.3) {
+    // In his hand, then Mifflin's, then laid on the desk.
+    const lay = smooth(invLerp(T.hand + 0.5, T.hand + 0.9, t)), p = t < T.hand + 0.15 ? [wo.hand[0] + 8, wo.hand[1] - 4] : lerp2([mf.hand[0] - 8, mf.hand[1] - 4], [850, 1318], lay);
+    drawCommission(g, p[0], p[1], t < T.hand + 0.15 ? -0.2 : lerp(0.15, 0, lay), L);
+  }
+}
+function camFarewell(lt) {
+  const T = FAR.T, s0 = FAR.s0, h = T.hand - s0;
+  return { z: track([[0, 1.12], [h - 1.2, 1.5], [h + 2, 1.56], [h + 4.2, 1.3], [durOf('farewell'), 1.14]])(lt), x: track([[0, 560], [h - 1.2, 690], [h + 2, 700], [h + 4.2, 560], [durOf('farewell'), 470]])(lt), y: track([[0, 1180], [h - 1.2, 1330], [h + 2, 1330], [h + 4.2, 1200], [durOf('farewell'), 1100]])(lt), rot: 0 };
+}
+SCN.farewell = { layers: [FAR_LAYERS.room, FAR_LAYERS.desk], draw: drawFarewell, cam: camFarewell };
+// A plain chorale in F for strings and low brass; a warm swell as the commission is given
+// up; the gallery murmurs; one bell.
+SCORE.farewell = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, bell, glock, pz, str, strH, brass } = K, T = FAR.T;
+  const ch = [[0, ['F2', 'C3', 'A3', 'F4']], [2, ['D2', 'A2', 'F3', 'D4']], [4, ['Bb1', 'F2', 'D3', 'Bb3']], [6, ['C2', 'G2', 'E3', 'C4']], [8, ['F2', 'C3', 'A3', 'F4']], [10, ['Bb1', 'F2', 'D3', 'F4']], [12, ['G2', 'D3', 'Bb3', 'D4']], [14, ['C2', 'G2', 'E3', 'G4']], [16, ['F2', 'C3', 'A3', 'F4']]];
+  ch.forEach(([bb, n], i) => str(B(bb), (i === ch.length - 1 ? s.end - B(bb) + 0.3 : 2 * b * 0.98), n, 0.26));
+  mel([[0, 'A4', 1], [1, 'Bb4', 1], [2, 'A4', 1.5], [3.5, 'G4', 0.5], [4, 'F4', 2], [6, 'G4', 1], [7, 'E4', 1], [8, 'F4', 1], [9, 'A4', 1], [10, 'D5', 2], [12, 'C5', 1], [13, 'Bb4', 1], [14, 'A4', 1], [15, 'G4', 1], [16, 'F4', 4]], 0.34);
+  for (const [bb, n, d] of [[10, 'F3', 2], [12, 'D3', 2], [14, 'C3', 2], [16, 'F3', 4]]) brass(B(bb), d * b * 0.95, [n, K.up(n, 7)], 0.34);
+  hold(T.bow, s.end - T.bow, (time, into) => N.crowdOn(time, into, s.end - T.bow, 0.16, 1.5));
+  bell(T.hand, 'F4', 0.35, 4); glock(T.hand + 0.1, 'C6', 0.2, 2); glock(T.hand + 0.3, 'F6', 0.16, 2);
+  for (let k = 0; k < 5; k++) one(T.turn + 0.4 + k * 0.55, time => N.knock ? null : N.click(time, 0.18));
+};
+
 /* ======================= scene 7 — peace, 1783 ============================= */
 function* buildPeaceBg(g, rng) {
   const box = { x0: -40, y0: -40, x1: 1120, y1: 1960 }, sun = { x: 330, y: 1000, r: 112 };
