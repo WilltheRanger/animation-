@@ -100,20 +100,25 @@
     border: 1px solid var(--line); background: var(--paper); color: var(--ink); font-weight: 700; cursor: pointer;
   }
   #bar { flex: none; width: 270px; display: flex; flex-direction: column; gap: 10px; }
-  #timeline { display: flex; gap: 3px; }
-  .seg {
-    flex: 1 1 0; min-width: 0;
-    display: flex; flex-direction: column; gap: 6px;
-    padding: 2px 0; border: 0; background: none; cursor: pointer;
-    color: var(--muted); text-align: left;
-    font: 700 10px/1 ui-rounded, system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase;
+  #now { display: flex; align-items: center; gap: 8px; }
+  #nowText { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+  #nowDate { font: 700 10px/1 ui-rounded, system-ui, sans-serif; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #nowName { max-width: 100%; font: 650 14px/1.2 ui-rounded, system-ui, sans-serif; color: var(--paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav {
+    flex: none; width: 34px; height: 34px; display: grid; place-items: center;
+    border-radius: 9px; border: 1px solid var(--line); background: var(--panel); color: var(--paper); cursor: pointer;
   }
-  .seg span { overflow: hidden; white-space: nowrap; text-overflow: clip; }
-  .seg .trk { position: relative; height: 4px; border-radius: 2px; background: rgba(241, 230, 207, .14); overflow: hidden; }
-  .seg .trk i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--paper); }
-  .seg.on { color: var(--paper); }
-  .seg:hover { color: var(--paper); }
-  .seg:focus-visible { outline: 2px solid var(--paper); outline-offset: 3px; border-radius: 3px; }
+  .nav:hover { background: var(--panel-hi); }
+  .nav:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+  .nav:disabled { opacity: .4; cursor: default; }
+  .nav svg { width: 16px; height: 16px; }
+  #timeline { display: flex; gap: 2px; }
+  .seg { flex: 1 1 0; min-width: 0; padding: 8px 0; border: 0; background: none; cursor: pointer; }
+  .seg i { position: relative; display: block; height: 5px; border-radius: 1.5px; background: rgba(241, 230, 207, .16); overflow: hidden; }
+  .seg i b { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--paper); }
+  .seg.on i { background: rgba(241, 230, 207, .32); }
+  .seg:hover i { background: rgba(241, 230, 207, .42); }
+  .seg:focus-visible { outline: 2px solid var(--paper); outline-offset: 1px; border-radius: 2px; }
   .row { display: flex; align-items: center; gap: 8px; }
   .btn {
     height: 38px; display: inline-flex; align-items: center; gap: 7px;
@@ -146,7 +151,7 @@
 <body>
 <div id="app">
   <div id="stage">
-    <canvas id="film" width="1080" height="1920" aria-label="Animated film: the American Revolution from 1765 to 1783, drawn in colored pencil"></canvas>
+    <canvas id="film" width="1080" height="1920" aria-label="Animated film: the American Revolution from 1763 to 1789, drawn in colored pencil"></canvas>
     <div id="loading" class="veil"><span>Sharpening pencils…</span><div class="track"><i></i></div></div>
     <button id="intro" class="veil" type="button" hidden aria-label="Play the film with sound">
       <span class="go">
@@ -158,6 +163,11 @@
     <div id="toast" hidden role="status"><span id="toastMsg"></span><button id="toastBtn" type="button" hidden>Save video</button></div>
   </div>
   <div id="bar">
+    <div id="now">
+      <button id="prevBtn" class="nav" type="button" aria-label="Previous scene"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></svg></button>
+      <div id="nowText"><span id="nowDate">1763</span><span id="nowName">British North America</span></div>
+      <button id="nextBtn" class="nav" type="button" aria-label="Next scene"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>
+    </div>
     <div id="timeline" role="group" aria-label="Jump to a scene"></div>
     <div class="row">
       <button id="playBtn" class="btn" type="button">
@@ -171,7 +181,7 @@
       <button id="recBtn" class="btn rec" type="button" aria-label="Record the film to a video file">
         <span class="dot"></span><span id="recLabel">Record</span>
       </button>
-      <output id="clock">0.0 / 80.0</output>
+      <output id="clock">0:00 / 10:00</output>
     </div>
   </div>
 </div>
@@ -190,36 +200,97 @@
    (0 = scene start, 1 = scene end). The animation and the music both read
    these, so stretching or moving a scene carries its sounds with it.
    ========================================================================= */
-const SCENES = [
-  { id: 'colonies',    label: '1765',    start: 0,  end: 11,
-    cues: { coast: 2 / 18, names: 7 / 18, ship: 8 / 18, stamp: 14 / 18 } },       // stamp slams down at 8.6s
-  { id: 'tea',         label: '1773',    start: 11, end: 22,
-    cues: { throws: 2.5 / 16 } },                                                // first chest goes over at 12.7s
-  { id: 'lexington',   label: '1775',    start: 22, end: 33,
-    cues: { halt: 6 / 16, ready: 7 / 16, aim: 8 / 16, fire: 9.5 / 16, reply: 11 / 16 } },  // volley at 28.5s
-  { id: 'declaration', label: 'Jul ’76', start: 33, end: 45,
-    cues: { header: 0.04, title: 0.12, preamble: 0.3, truths: 0.44, more: 0.66, sign: 0.71, others: 0.86 } },
-  { id: 'delaware',    label: 'Dec ’76', start: 45, end: 57,
-    cues: { strokes: 1 / 16, shore: 12 / 16 } },                                 // oars dip every two beats
-  { id: 'yorktown',    label: '1781',    start: 57, end: 69,
-    cues: { chorus: 16 / 32 } },                                                 // "Yankee Doodle" chorus at 63s
-  { id: 'peace',       label: '1783',    start: 69, end: 80,
-    cues: { title: 0.3, fade: 0.68 } },                                          // fade to paper from 76.5s
+// [id, label shown under the film, seconds, cues]. Scenes follow on from each other.
+const SCENE_LIST = [
+  ['colonies',     '1763',          22, { coast: 3 / 36, names: 12 / 36, line: 19 / 36, ship: 26 / 36 }],
+  ['stamp',        '1765',          20, { nail: 6 / 36, stamp: 18 / 36, fire: 24 / 36 }],
+  ['spinning',     '1767',          18, {}],
+  ['massacre',     '1770',          22, { face: 6 / 30, snow: 11 / 30, fire: 17 / 30, flee: 18 / 30 }],
+  ['tea',          '1773',          24, { throws: 2.5 / 35 }],
+  ['blockade',     '1774',          16, {}],
+  ['congress',     'Sep 1774',      16, {}],
+  ['revere',       'Apr 1775',      24, { lanterns: 2 / 52, ride: 14 / 52 }],
+  ['lexington',    'Apr 1775',      22, { halt: 14 / 32, ready: 16 / 32, aim: 17.5 / 32, fire: 19 / 32, reply: 21 / 32, march: 27 / 32 }],
+  ['concord',      'Apr 1775',      18, { fire: 8 / 24, retreat: 12 / 24 }],
+  ['bunker',       'Jun 1775',      26, { volley: 16 / 36, second: 26 / 36 }],
+  ['command',      'Jul 1775',      18, {}],
+  ['paine',        'Jan 1776',      18, {}],
+  ['declaration',  'Jul 1776',      24, { header: 0.03, title: 0.1, preamble: 0.26, truths: 0.4, more: 0.63, sign: 0.69, others: 0.86 }],
+  ['statue',       'Jul 1776',      16, { fall: 16 / 28 }],
+  ['retreat',      'Aug 1776',      16, {}],
+  ['delaware',     'Dec 1776',      18, { strokes: 1 / 24, shore: 18 / 24 }],
+  ['trenton',      'Dec 1776',      14, { charge: 6 / 28 }],
+  ['saratoga',     'Oct 1777',      22, { swords: 20 / 40 }],
+  ['valley',       '1777–78',       24, {}],
+  ['france',       'Feb 1778',      18, { sign: 21 / 33 }],
+  ['monmouth',     'Jun 1778',      18, { shot: 10 / 30, takes: 14 / 30 }],
+  ['jones',        'Sep 1779',      24, { broadside: 6 / 36, quote: 18 / 36 }],
+  ['swamp',        '1780',          16, {}],
+  ['siege',        'Oct 1781',      22, {}],
+  ['yorktown',     'Oct 1781',      24, { chorus: 16 / 64 }],
+  ['treaty',       'Sep 1783',      16, { sign: 12 / 24 }],
+  ['farewell',     'Dec 1783',      16, { hand: 10 / 20 }],
+  ['constitution', 'Sep 1787',      20, { header: 0.03, preamble: 0.14, articles: 0.5, sign: 0.66, others: 0.8 }],
+  ['inauguration', 'Apr 1789',      16, { oath: 7 / 24, cheer: 11 / 24 }],
+  ['finale',       'The End',       12, { title: 0.08, end: 0.4, fade: 0.72 }],
 ];
+const SCENES = [];
+for (let i = 0, t = 0; i < SCENE_LIST.length; i++) {
+  const [id, label, dur, cues] = SCENE_LIST[i];
+  SCENES.push({ id, label, start: t, end: t + dur, cues }); t += dur;
+}
 
 // Beats of music written for each scene. The tempo stretches with the scene,
 // so phrases always land on scene boundaries.
-const MUSIC_BEATS = { colonies: 18, tea: 16, lexington: 16, declaration: 16, delaware: 16, yorktown: 32, peace: 16 };
+const MUSIC_BEATS = {
+  colonies: 36, stamp: 36, spinning: 27, massacre: 30, tea: 35, blockade: 20, congress: 20, revere: 52, lexington: 32, concord: 24,
+  bunker: 36, command: 30, paine: 30, declaration: 32, statue: 28, retreat: 20, delaware: 24, trenton: 28, saratoga: 40, valley: 30,
+  france: 33, monmouth: 30, jones: 36, swamp: 24, siege: 32, yorktown: 64, treaty: 24, farewell: 20, constitution: 28, inauguration: 24, finale: 16,
+};
 
 // Caption card at the foot of each scene: [date line, sentence].
 const CAPTIONS = {
-  colonies:    ['1765 · The Stamp Act', 'Britain taxes its thirteen American colonies, which have no vote in Parliament.'],
-  tea:         ['December 16, 1773 · Boston', 'Protesting a British tax on tea, colonists dump 342 chests into the harbor.'],
-  lexington:   ['April 19, 1775 · Lexington & Concord', 'Militia and British troops trade fire — “the shot heard round the world.” The war begins.'],
-  declaration: ['July 4, 1776 · Philadelphia', 'Congress adopts the Declaration of Independence.'],
-  delaware:    ['December 25, 1776 · Delaware River', 'Washington crosses the icy river by night and wins a surprise victory at Trenton.'],
-  yorktown:    ['October 19, 1781 · Yorktown', 'Trapped by American and French forces, the British army surrenders.'],
-  peace:       ['September 3, 1783 · Paris', 'The Treaty of Paris ends the war. Britain recognizes the United States.'],
+  colonies:     ['1763 · British North America', 'Britain wins the French and Indian War but is deep in debt. It closes the land beyond the mountains to settlers and looks to its thirteen colonies to help pay.'],
+  stamp:        ['1765 · The Stamp Act', 'A new tax on newspapers, legal papers, even playing cards. Colonists protest: “No taxation without representation!”'],
+  spinning:     ['1767 · The Townshend Acts', 'Britain taxes glass, paint, paper and tea. Colonists boycott British goods, and women spin their own cloth.'],
+  massacre:     ['March 5, 1770 · Boston', 'British soldiers fire into a crowd, killing five colonists. It becomes known as the Boston Massacre.'],
+  tea:          ['December 16, 1773 · Boston', 'Protesting a British tax on tea, colonists dump 342 chests of tea into the harbor.'],
+  blockade:     ['1774 · The Intolerable Acts', 'In punishment, Britain closes Boston Harbor and puts Massachusetts under military rule.'],
+  congress:     ['September 1774 · Philadelphia', 'Delegates from twelve colonies meet as the First Continental Congress to resist the new laws.'],
+  revere:       ['April 18, 1775 · Boston', 'Two lanterns in the Old North Church: the British are coming by sea. Paul Revere rides to warn the countryside.'],
+  lexington:    ['April 19, 1775 · Lexington', 'At dawn, British troops and colonial militia exchange fire on the town green. The war has begun.'],
+  concord:      ['April 19, 1775 · Concord', 'At the North Bridge the militia fire back — “the shot heard round the world” — and the British retreat to Boston.'],
+  bunker:       ['June 17, 1775 · Bunker Hill', 'The British take the hill on their third charge, but more than a thousand of their men are killed or wounded.'],
+  command:      ['July 3, 1775 · Cambridge', 'George Washington takes command of the new Continental Army.'],
+  paine:        ['January 1776 · Philadelphia', 'Thomas Paine’s pamphlet Common Sense makes the case for independence. Over 100,000 copies are sold.'],
+  declaration:  ['July 4, 1776 · Philadelphia', 'Congress adopts the Declaration of Independence.'],
+  statue:       ['July 9, 1776 · New York', 'After hearing the Declaration read aloud, a crowd pulls down the statue of King George III.'],
+  retreat:      ['August 1776 · Brooklyn', 'Beaten on Long Island, Washington’s army escapes across the East River by night, hidden by fog.'],
+  delaware:     ['December 25, 1776 · Delaware River', 'On Christmas night, Washington’s army crosses the icy river in a snowstorm.'],
+  trenton:      ['December 26, 1776 · Trenton', 'At dawn they surprise the Hessian troops holding Trenton and take about 900 prisoners.'],
+  saratoga:     ['October 17, 1777 · Saratoga', 'A whole British army surrenders at Saratoga. It is the turning point of the war.'],
+  valley:       ['Winter 1777–78 · Valley Forge', 'The army shivers through the winter in log huts. Baron von Steuben drills it into a disciplined force.'],
+  france:       ['February 6, 1778 · Paris', 'Benjamin Franklin wins an alliance with France. French money, soldiers and ships join the fight.'],
+  monmouth:     ['June 28, 1778 · Monmouth', 'In fierce heat, legend says “Molly Pitcher” carried water to the troops, then took her husband’s place at a cannon.'],
+  jones:        ['September 23, 1779 · North Sea', 'His own ship burning and sinking, Captain John Paul Jones fights on and captures HMS Serapis. “I have not yet begun to fight!”'],
+  swamp:        ['1780 · South Carolina', 'The war moves south. From the swamps, Francis Marion’s raiders strike and vanish — the “Swamp Fox.”'],
+  siege:        ['Autumn 1781 · Yorktown', 'A French fleet blocks the Chesapeake Bay while American and French guns pound the British army at Yorktown.'],
+  yorktown:     ['October 19, 1781 · Yorktown', 'Trapped by American and French forces, the British army surrenders.'],
+  treaty:       ['September 3, 1783 · Paris', 'The Treaty of Paris ends the war. Britain recognizes the United States as independent.'],
+  farewell:     ['December 23, 1783 · Annapolis', 'Instead of seizing power, Washington hands his commission back to Congress and goes home.'],
+  constitution: ['September 17, 1787 · Philadelphia', 'Delegates sign a new plan of government: the Constitution of the United States.'],
+  inauguration: ['April 30, 1789 · New York', 'George Washington takes the oath of office as the first President of the United States.'],
+  finale:       null,
+};
+// Longer names for the scene bar.
+const SCENE_NAMES = {
+  colonies: 'British North America', stamp: 'The Stamp Act', spinning: 'The Townshend Acts', massacre: 'The Boston Massacre',
+  tea: 'The Boston Tea Party', blockade: 'The Intolerable Acts', congress: 'The First Continental Congress', revere: 'Paul Revere’s Ride',
+  lexington: 'Lexington', concord: 'Concord', bunker: 'Bunker Hill', command: 'Washington Takes Command', paine: 'Common Sense',
+  declaration: 'The Declaration of Independence', statue: 'Down Comes the King', retreat: 'Escape from Long Island', delaware: 'Crossing the Delaware',
+  trenton: 'Trenton', saratoga: 'Saratoga', valley: 'Valley Forge', france: 'The French Alliance', monmouth: 'Monmouth', jones: 'John Paul Jones',
+  swamp: 'The Swamp Fox', siege: 'The Siege of Yorktown', yorktown: 'Surrender at Yorktown', treaty: 'The Treaty of Paris', farewell: 'Washington Resigns',
+  constitution: 'The Constitution', inauguration: 'The First President', finale: 'The United States of America',
 };
 
 const CONFIG = {
@@ -228,10 +299,10 @@ const CONFIG = {
   boilPasses: 3,             // randomised hatch passes per layer that the boil shuffles between
   fadeColor: '#ece0c6',      // colour of the dips between scenes and the end fade (paper)
   dip: [0.3, 0.38],          // seconds of fade out / fade in at each scene change
-  posterTime: 8.3,           // frame shown under the Play button
+  posterTime: 17.2,          // frame shown under the Play button
   musicLevel: 1.4,           // overall music volume (1 = unity gain before the limiter)
   recordFps: 30,
-  recordVideoBps: 8e6,
+  recordVideoBps: 2.4e6,     // keeps a 10-minute recording under about 200 MB
   recordTail: 0.8,           // seconds recorded after the end so the last chord rings out
 };
 
@@ -243,6 +314,9 @@ const cue = (id, name) => { const s = sceneById[id]; return s.start + (s.end - s
 const sceneAt = t => SCENES.find(s => t < s.end) || SCENES[SCENES.length - 1];
 const beatOf = id => { const s = sceneById[id], b = (s.end - s.start) / MUSIC_BEATS[id]; return beats => s.start + beats * b; };
 const beatLen = id => (sceneById[id].end - sceneById[id].start) / MUSIC_BEATS[id];
+const durOf = id => sceneById[id].end - sceneById[id].start;
+// Each scene registers its drawing (SCN) and its music (SCORE) next to its own code.
+const SCN = {}, SCORE = {};
 
 /* ========================== small math kit ============================== */
 const TAU = Math.PI * 2;
@@ -581,40 +655,77 @@ function boilIndex(tick, n, seed) {
   return a === p ? (a + 1 + (hash3(tick, seed, 3) % (n - 1))) % n : a;
 }
 
-// Layers are drawn in slices between frames (current scene first) so the film
-// can start before every scene is ready. A layer that is needed and not ready
-// yet is finished on the spot.
-const JOBS = [];
-function queueLayer(L, scene) { for (let i = 0; i < L.passes; i++) JOBS.push({ L, i, scene, it: null }); }
-function jobPriority(j, from) {
-  const k = SCENES.findIndex(s => s.id === j.scene), f = SCENES.findIndex(s => s.id === from);
-  const dist = k < 0 ? 0 : (k - f + SCENES.length) % SCENES.length;
-  return dist * 8 + Math.min(j.i, 6) + (j.it ? -0.5 : 0);
+// Layers are drawn in slices between frames so the film can play while the next
+// scenes are still being drawn. Only the scene playing, the one before it and the
+// next two are kept; older ones are dropped and redrawn if you go back to them.
+// A layer that is needed and not ready yet is finished on the spot.
+const JOBS = [], KEEP = { behind: 1, ahead: 2 }, LAYER_USE = new Map();
+let planned = -1;
+const sceneIndexAt = t => SCENES.indexOf(sceneAt(t));
+function registerLayers(shared) {
+  SCENES.forEach((s, i) => { for (const L of SCN[s.id].layers) { if (!LAYER_USE.has(L)) LAYER_USE.set(L, []); LAYER_USE.get(L).push(i); } });
+  for (const L of shared) if (!LAYER_USE.has(L)) LAYER_USE.set(L, [0]);
 }
+function evictLayer(L) {
+  for (let i = JOBS.length - 1; i >= 0; i--) if (JOBS[i].L === L) JOBS.splice(i, 1);
+  for (const c of L.variants) if (c) { c.width = 0; c.height = 0; }          // frees the pixels promptly (Safari)
+  L.variants = []; L.ready = [];
+}
+function planLayers(cur) {
+  if (cur === planned) return;
+  planned = cur;
+  for (const [L, uses] of LAYER_USE) {
+    let d = Infinity;
+    for (const i of uses) if (i - cur >= -KEEP.behind && i - cur <= KEEP.ahead) d = Math.min(d, Math.max(0, i - cur));
+    if (d === Infinity && !L.pinned) { if (L.variants.length || JOBS.some(j => j.L === L)) evictLayer(L); continue; }
+    const k = d === Infinity ? cur : cur + d;
+    for (let i = 0; i < L.passes; i++) {
+      const j = JOBS.find(q => q.L === L && q.i === i);
+      if (j) j.k = k; else if (!L.variants[i]) JOBS.push({ L, i, k, it: null });
+    }
+  }
+}
+// Scene order first; within a scene one pass of every layer before the extra boil passes.
+const jobPriority = (j, cur) => (j.k < cur ? 50 : j.k - cur) * 8 + Math.min(j.i, 6) + (j.it ? -0.5 : 0);
 const JOB_STATS = {};
 function stepJob(j, until) {
   if (!j.it) j.it = j.L.renderIter(j.i);
   for (let now = performance.now(); now < until;) {
     const done = j.it.next().done, t2 = performance.now(), k = j.L.name;
     JOB_STATS[k] = Math.max(JOB_STATS[k] || 0, t2 - now); now = t2;
-    if (done) { JOBS.splice(JOBS.indexOf(j), 1); return true; }
+    if (done) { const at = JOBS.indexOf(j); if (at >= 0) JOBS.splice(at, 1); return true; }
   }
   return false;
 }
-function pumpJobs(ms, fromScene) {
+function pumpJobs(ms, cur) {
   const until = performance.now() + ms;
   while (JOBS.length && performance.now() < until) {
     let best = JOBS[0], bp = Infinity;
-    for (const j of JOBS) { const p = jobPriority(j, fromScene); if (p < bp) { bp = p; best = j; } }
+    for (const j of JOBS) { const p = jobPriority(j, cur); if (p < bp) { bp = p; best = j; } }
     stepJob(best, until);
   }
 }
-function ensureLayer(L) {
-  const j = JOBS.find(q => q.L === L && q.it) || JOBS.find(q => q.L === L);
-  if (j) stepJob(j, Infinity);
+function jobFor(L) {
+  let j = JOBS.find(q => q.L === L && q.it) || JOBS.find(q => q.L === L);
+  if (!j) { let i = 0; while (L.variants[i]) i++; j = { L, i, k: Math.max(0, planned), it: null }; JOBS.push(j); }
+  return j;
 }
-function flushScene(id) { for (const j of JOBS.filter(q => q.scene === id)) stepJob(j, Infinity); }
-function flushAll() { while (JOBS.length) stepJob(JOBS[0], Infinity); }
+function ensureLayer(L) { stepJob(jobFor(L), Infinity); }
+// Draw a scene's layers (at least `min` passes of each) a slice at a time, reporting progress.
+async function prepareScene(idx, min = 1, onProgress = null) {
+  planLayers(idx);
+  const Ls = SCN[SCENES[idx].id].layers, need = L => Math.min(min, L.passes);
+  const total = Ls.reduce((a, L) => a + need(L), 0) || 1;
+  let done = Ls.reduce((a, L) => a + Math.min(L.ready.length, need(L)), 0);
+  for (const L of Ls) {
+    while (L.ready.length < need(L)) {
+      const j = jobFor(L);
+      while (!stepJob(j, performance.now() + 30)) await new Promise(r => setTimeout(r, 0));
+      done++; if (onProgress) onProgress(done / total);
+    }
+  }
+}
+function flushScene(idx) { planLayers(idx); for (const L of SCN[SCENES[idx].id].layers) while (L.ready.length < L.passes) ensureLayer(L); }
 
 /* ------------------------------ paper ----------------------------------- */
 function makePaper() {
@@ -1110,6 +1221,33 @@ function drawPole(g, x, y0, y1, tick, L = LIGHTS.day, w = 7) {
   sketchLine(g, Array.from({ length: 9 }, (_, i) => [x + Math.cos(i / 8 * TAU) * w * 0.9, y0 - 6 + Math.sin(i / 8 * TAU) * w * 0.9]), rng, 0.6, L.ink, 1.6, 0.8);
 }
 
+/* ------------------------------- ribbons ----------------------------------- */
+// A parchment ribbon that unrolls from the centre (u = 0…1), its lettering following
+// the ribbon's sag (a circular arc dipping `dip` px at x = ±w).
+function drawRibbon(g, tick, cx, cy, u, text, font, o = {}) {
+  if (u <= 0) return;
+  const W = o.w ?? 440, dip = o.dip ?? 30, half = W * u, rng = mulberry32(hash3(tick, o.seed ?? 71)), band = [];
+  for (let k = 0; k <= 24; k++) { const x = cx - half + 2 * half * k / 24; band.push([x, cy - 58 + dip * ((x - cx) / W) ** 2]); }
+  for (let k = 24; k >= 0; k--) { const x = cx - half + 2 * half * k / 24; band.push([x, cy + 50 + dip * ((x - cx) / W) ** 2]); }
+  for (const sgn of [-1, 1]) {
+    const ex = cx + sgn * half, tail = [[ex - sgn * 10, cy - 20], [ex + sgn * 70, cy - 12], [ex + sgn * 44, cy + 40], [ex + sgn * 80, cy + 92], [ex - sgn * 10, cy + 84]];
+    g.fillStyle = '#b89968'; g.beginPath(); polyPath(g, tail); g.fill();
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = pat('shade', tick, 3); g.fill(); g.globalCompositeOperation = 'source-over';
+    sketchLine(g, tail.concat([tail[0]]), rng, 1, '#3a2616', 2.2, 0.9);
+  }
+  g.fillStyle = '#efe0bb'; g.beginPath(); polyPath(g, band); g.fill();
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = pat('grain', tick, 5); g.fill(); g.globalCompositeOperation = 'source-over';
+  g.fillStyle = pat('lift', tick, 6); g.fill();
+  sketchLine(g, band.concat([band[0]]), rng, 1, '#3a2616', 2.6, 0.95);
+  g.save(); g.beginPath(); polyPath(g, band); g.clip();
+  g.fillStyle = '#23160e'; g.font = font; g.textBaseline = 'middle';
+  const R = W * W / (2 * dip), chars = [...text], ws = chars.map(ch => g.measureText(ch).width), tot = ws.reduce((a, b) => a + b, 0) + 2 * (chars.length - 1);
+  let a = -tot / 2;
+  chars.forEach((ch, i) => { const x = a + ws[i] / 2; g.save(); g.translate(cx + x, cy - 4 + (o.ty || 0) + x * x / (2 * R)); g.rotate(Math.atan(x / R)); g.fillText(ch, -ws[i] / 2, 0); g.restore(); a += ws[i] + 2; });
+  g.restore();
+  g.textBaseline = 'alphabetic';
+}
+
 /* ------------------------------- smoke ------------------------------------- */
 function* puffBuild(g, rng, i) {
   const r0 = mulberry32(hash3(i, 3, 3)), blobs = [];
@@ -1207,10 +1345,10 @@ function makeField(lines, box, step) {
 }
 
 // Shared sprites: smoke puffs, flags, the caption card.
-const PUFFS = [0, 1, 2, 3].map(k => new BoilLayer({ name: 'puff' + k, box: { x0: -128, y0: -128, x1: 128, y1: 128 }, res: 0.7, seed: 300 + k, build: function* (g, rng) { yield* puffBuild(g, rng, k); } }));
-const FLAGS = Object.fromEntries(['us', 'union', 'fr'].map((k, i) => [k, new BoilLayer({ name: 'flag-' + k, box: { x0: 0, y0: 0, x1: FLAG_W, y1: FLAG_H }, res: 1, seed: 310 + i, build: function* (g, rng) { yield* flagBuild(g, rng, k); } })]));
+const PUFFS = [0, 1, 2, 3].map(k => new BoilLayer({ name: 'puff' + k, box: { x0: -128, y0: -128, x1: 128, y1: 128 }, res: 0.7, seed: 300 + k, pinned: true, build: function* (g, rng) { yield* puffBuild(g, rng, k); } }));
+const FLAGS = Object.fromEntries(['us', 'union', 'fr'].map((k, i) => [k, new BoilLayer({ name: 'flag-' + k, box: { x0: 0, y0: 0, x1: FLAG_W, y1: FLAG_H }, res: 1, seed: 310 + i, pinned: true, build: function* (g, rng) { yield* flagBuild(g, rng, k); } })]));
 const CARD = new BoilLayer({
-  name: 'card', box: { x0: 0, y0: 0, x1: 960, y1: 300 }, res: 1, seed: 320,
+  name: 'card', box: { x0: 0, y0: 0, x1: 960, y1: 300 }, res: 1, seed: 320, pinned: true,
   build: function* (g, rng) {
     const r = 18, inside = (x, y) => {
       const dx = Math.max(r - x, 0, x - (960 - r)), dy = Math.max(r - y, 0, y - (300 - r));
@@ -1280,6 +1418,9 @@ const NAMES = [
   ['VIRGINIA', [-78.6, 37.7], 34, -0.08], ['N. CAROLINA', [-79.3, 35.62], 30, -0.06], ['S. CAROLINA', [-80.9, 33.95], 28, -0.12], ['GEORGIA', [-81.75, 32.95], 27, -0.26],
 ].map(([t, ll, sz, a]) => ({ text: t, p: proj(ll), size: sz, ang: a }));
 const COMPASS = { x: 850, y: 1235, r: 78 };
+// The Proclamation Line of 1763, roughly along the Appalachian divide.
+const PROC = [[-76.5, 43.4], [-77.8, 42.2], [-78.6, 41.2], [-79.3, 40.2], [-79.9, 39.2], [-80.6, 38.2], [-81.4, 37.2], [-82.3, 36.2], [-83.0, 35.2], [-83.15, 34.7]].map(proj);
+const PROC_CUM = polyLength(PROC);
 
 let MAP_LAND = null, MAP_DIST = null;
 function prepMap() {
@@ -1424,13 +1565,15 @@ const QUILL_TIP = (g, x, y, sc, ang, rng, L = LIGHTS.day) => {
 
 const COL = (() => {
   const B = beatOf('colonies');
-  const T = { coast0: cue('colonies', 'coast'), coast1: B(7), names: cue('colonies', 'names'), ship: cue('colonies', 'ship'), stamp: cue('colonies', 'stamp') };
+  const T = { coast0: cue('colonies', 'coast'), coast1: B(11), names: cue('colonies', 'names'), ship: cue('colonies', 'ship'), line: cue('colonies', 'line') };
+  T.line1 = T.line + 3.2;
   const nameT = NAMES.map((_, k) => T.names + k * 0.5 * beatLen('colonies'));
   // Highest point the pen has reached so far (the map is revealed down to it).
   const maxY = []; let m = -Infinity; for (const p of COAST) { m = Math.max(m, p[1]); maxY.push(m); }
   const penL = t => COAST_CUM[COAST_CUM.length - 1] * easeInOut(invLerp(T.coast0, T.coast1, t));
   const shipPath = t => { const p = easeInOut(invLerp(T.ship, T.ship + 6, t)); return [lerp(1140, 880, p), lerp(830, 690, p) + 26 * Math.sin(p * Math.PI)]; };
-  return { T, nameT, maxY, penL, shipPath };
+  const lineL = t => PROC_CUM[PROC_CUM.length - 1] * easeInOut(invLerp(T.line, T.line1, t));
+  return { T, nameT, maxY, penL, shipPath, lineL };
 })();
 function drawColonies(g, t, lt, tick) {
   const T = COL.T, rng = mulberry32(hash3(tick, 1101));
@@ -1447,7 +1590,7 @@ function drawColonies(g, t, lt, tick) {
   const a2 = smooth(invLerp(1.5, 2.3, lt));
   if (a2 > 0) {
     g.globalAlpha = a2; g.fillStyle = '#8e3a22'; g.font = `40px ${SERIF_SC}`;
-    const w2 = spacedText(g, '1765 – 1783', 540, 262, 6);
+    const w2 = spacedText(g, '1763 – 1789', 540, 262, 6);
     g.strokeStyle = '#8e3a22'; g.lineWidth = 2;
     g.beginPath(); g.moveTo(540 - w2 / 2 - 150, 250); g.lineTo(540 - w2 / 2 - 30, 250); g.moveTo(540 + w2 / 2 + 30, 250); g.lineTo(540 + w2 / 2 + 150, 250); g.stroke();
     g.globalAlpha = 1;
@@ -1503,6 +1646,17 @@ function drawColonies(g, t, lt, tick) {
     g.save(); g.translate(735, 905); g.rotate(-0.28); g.globalAlpha = oa; g.fillStyle = '#20343f'; g.font = `italic 40px ${SERIF}`;
     spacedText(g, 'Atlantic', 0, 0, 7); spacedText(g, 'Ocean', 34, 48, 7); g.restore();
   }
+  // The Proclamation Line: no settling west of the mountains.
+  const PL = COL.lineL(t);
+  if (PL > 0) {
+    strokePoly(g, polyUpTo(PROC, PROC_CUM, PL).map(([x, y]) => [x + (rng() - 0.5) * 1.2, y + (rng() - 0.5) * 1.2]), '#9b2d1f', 3.6, 0.9, [15, 9]);
+    const la = smooth(invLerp(T.line1 - 0.8, T.line1 + 0.2, t));
+    if (la > 0) {
+      g.save(); g.translate(122, 872); g.rotate(-1.0); g.globalAlpha = la; g.fillStyle = '#8a2a1c'; g.font = `italic 25px ${SERIF}`; g.textAlign = 'center';
+      g.fillStyle = 'rgba(240,228,200,0.6)'; for (const [ox, oy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) g.fillText('Proclamation Line, 1763', ox, oy);
+      g.fillStyle = '#8a2a1c'; g.fillText('Proclamation Line, 1763', 0, 0); g.restore();
+    }
+  }
   // Colony names pop on with the tune.
   g.textBaseline = 'middle';
   NAMES.forEach((n, k) => {
@@ -1528,30 +1682,19 @@ function drawColonies(g, t, lt, tick) {
     g.globalAlpha = 1;
     MAPSHIP.drawAt(g, tick, sx, sy, 0.95, 0.05 * Math.sin(lt * 2.4), smooth(invLerp(T.ship, T.ship + 0.4, t)), -1);
   }
-  // The pen nib while the coast is being drawn.
+  // The pen, drawing the coast and then the line.
   if (L > 0 && t < T.coast1 + 0.25) {
     const P = polyUpTo(COAST, COAST_CUM, L), tip = P[P.length - 1];
     QUILL_TIP(g, tip[0], tip[1], 0.55, -0.95 + 0.05 * Math.sin(lt * 30), rng);
   }
-  g.restore();
-  // The Stamp Act lands.
-  if (t > T.stamp - 0.16) {
-    const d = t - T.stamp, p = invLerp(-0.16, 0, d);
-    const sc = d < 0 ? lerp(2.2, 1, easeIn2(p)) : 1 + 0.05 * Math.exp(-d * 9) * Math.cos(d * 38);
-    STAMP.drawAt(g, tick, 430, 1040, sc, -0.17, d < 0 ? p * 0.85 : 0.92);
-    if (d > 0 && d < 0.4) {
-      g.strokeStyle = '#2b1d13'; g.lineWidth = 2.4; g.globalAlpha = 1 - d / 0.4; g.beginPath();
-      for (let k = 0; k < 16; k++) {
-        const a = k / 16 * TAU + 0.2, r0 = 200 + d * 180, r1 = r0 + 26 + 20 * rand3(k, 3, 3);
-        g.moveTo(430 + Math.cos(a) * r0, 1040 + Math.sin(a) * r0); g.lineTo(430 + Math.cos(a) * r1, 1040 + Math.sin(a) * r1);
-      }
-      g.stroke(); g.globalAlpha = 1;
-    }
+  if (PL > 0 && t < T.line1 + 0.25) {
+    const P = polyUpTo(PROC, PROC_CUM, PL), tip = P[P.length - 1];
+    QUILL_TIP(g, tip[0], tip[1], 0.55, -0.9 + 0.05 * Math.sin(lt * 26), rng);
   }
+  g.restore();
 }
-function camColonies(lt, t) {
-  const d = t - COL.T.stamp, amp = d > 0 ? 16 * Math.exp(-d * 7) : 0;
-  return { z: 1 + 0.02 * smooth(invLerp(0, 11, lt)), x: 540 + amp * vnoise(t * 30, 1), y: 960 + amp * vnoise(t * 27, 2), rot: amp * 0.0012 * vnoise(t * 20, 3) };
+function camColonies(lt) {
+  return { z: 1 + 0.035 * smooth(invLerp(0, 22, lt)), x: 540 - 14 * smooth(invLerp(10, 16, lt)), y: 960 - 10 * smooth(invLerp(10, 16, lt)), rot: 0 };
 }
 
 /* ===================== scene 2 — the Boston Tea Party, 1773 ================ */
@@ -1559,11 +1702,11 @@ const TEA = (() => {
   const B = beatOf('tea'), bl = beatLen('tea');
   const rail = curveY([[-40, 1016], [100, 1004], [250, 1062], [450, 1086], [700, 1086], [840, 1062], [880, 1000], [1010, 986], [1120, 984]]);
   const throwers = [
-    { x: 232, outfit: 'colonistA', seed: 51, rel: [2.5, 6.5, 10.5].map(B) },
-    { x: 606, outfit: 'colonistB', seed: 52, rel: [4.5, 8.5, 12.5].map(B) },
+    { x: 232, outfit: 'colonistA', seed: 51, rel: [2.5, 6.5, 10.5, 14.5, 18.5, 22.5, 26.5].map(B) },
+    { x: 606, outfit: 'colonistB', seed: 52, rel: [4.5, 8.5, 12.5, 16.5, 20.5, 24.5, 28.5].map(B) },
   ];
   const chests = [];
-  throwers.forEach((th, i) => th.rel.forEach((r, k) => chests.push({ th: i, r, land: r + bl, k: chests.length, dx: 235 + 35 * ((k + i) % 3), y: 1520 + 48 * ((k * 2 + i) % 3) })));
+  throwers.forEach((th, i) => th.rel.forEach((r, k) => chests.push({ th: i, r, land: r + bl, k: chests.length, dx: 190 + 110 * rand3(k, i, 31), y: 1480 + 230 * rand3(k, i, 32) })));
   const MOON = { x: 238, y: 318, r: 62 };
   const MASTS = [{ x: 318, top: 300, w: 14 }, { x: 588, top: 190, w: 16 }, { x: 845, top: 360, w: 12 }];
   const PIVOT = [560, 1300];
@@ -1818,7 +1961,9 @@ function drawTea(g, t, lt, tick) {
       Lset.chest.drawAt(g, tick, x, y, lerp(1.1, 1.35, u), (c.k % 2 ? 1 : -1) * 1.7 * u);
       continue;
     }
-    const a2 = age - T1, bob = 4 * Math.sin(a2 * 2.4 + c.k), fx = land[0] + 9 * a2, fy = land[1] + 8 + bob;
+    const a2 = age - T1, sink = smooth(invLerp(7, 10, a2)), bob = 4 * Math.sin(a2 * 2.4 + c.k), fx = land[0] + 11 * a2, fy = land[1] + 8 + bob + 34 * sink;
+    if (sink >= 1) continue;
+    g.globalAlpha = 1 - sink;
     // Tea leaves spreading.
     g.fillStyle = '#2a1c10';
     for (let k = 0; k < 26; k++) {
@@ -1826,8 +1971,9 @@ function drawTea(g, t, lt, tick) {
       g.globalAlpha = 0.55 * smooth(clamp(a2 / 0.4)); g.fillRect(fx + Math.cos(a) * d * 1.5, fy + 14 + Math.sin(a) * d * 0.4, 3, 2);
     }
     g.globalAlpha = 1;
-    Lset.chest.drawAt(g, tick, fx, fy, 1.3, (c.k % 2 ? 1 : -1) * 1.7 + 0.08 * Math.sin(a2 * 2));
-    g.fillStyle = 'rgba(10,16,32,0.72)'; g.beginPath(); g.ellipse(fx, fy + 44, 86, 30, 0, 0, TAU); g.fill();
+    Lset.chest.drawAt(g, tick, fx, fy, 1.3, (c.k % 2 ? 1 : -1) * 1.7 + 0.08 * Math.sin(a2 * 2), 1 - sink);
+    g.globalAlpha = 1;
+    g.fillStyle = 'rgba(10,16,32,0.72)'; g.beginPath(); g.ellipse(fx, fy + 44, 86, 30 + 20 * sink, 0, 0, TAU); g.fill();
     g.strokeStyle = 'rgba(190,200,220,0.65)'; g.lineWidth = 2.2; g.beginPath(); g.ellipse(fx, fy + 22, 66 + 4 * Math.sin(a2 * 3), 12, 0, Math.PI * 0.05, Math.PI * 0.95); g.stroke();
     // Ripples and spray.
     for (const d0 of [0, 0.35]) {
@@ -1846,7 +1992,7 @@ function drawTea(g, t, lt, tick) {
     }
   }
 }
-function camTea(lt) { return { z: lerp(1.03, 1.07, smooth(lt / 11)), x: lerp(540, 556, smooth(lt / 11)), y: lerp(958, 985, smooth(lt / 11)), rot: 0 }; }
+function camTea(lt) { const u = smooth(clamp(lt / durOf('tea'))); return { z: lerp(1.02, 1.08, u), x: lerp(536, 558, u), y: lerp(952, 990, u), rot: 0 }; }
 
 /* =================== scene 3 — Lexington & Concord, 1775 ================== */
 const SKY_DAWN = ['#6d7c99', '#8290ab', '#9ca7bc', '#c3b6b0', '#e2bea2', '#efd0ac', '#f6e3c3'];
@@ -1945,7 +2091,8 @@ const shiftPose = (P, dx) => {
 };
 const LEX = (() => {
   const s0 = sceneById.lexington.start, bl = beatLen('lexington');
-  const T = { halt: cue('lexington', 'halt'), ready: cue('lexington', 'ready'), aim: cue('lexington', 'aim'), fire: cue('lexington', 'fire'), reply: cue('lexington', 'reply') };
+  const T = { halt: cue('lexington', 'halt'), ready: cue('lexington', 'ready'), aim: cue('lexington', 'aim'), fire: cue('lexington', 'fire'), reply: cue('lexington', 'reply'), march: cue('lexington', 'march') };
+  T.flee = T.reply + 2.2;
   const S = 118, v = S / (2 * bl);
   const reds = [];
   [[1470, 1.4, [150, 335]], [1578, 1.62, [62, 250, 438]]].forEach(([y, s, xs], ri) => xs.forEach((x, k) => reds.push({ x, y, s, rank: ri, seed: 60 + ri * 3 + k, j: (rand3(ri, k, 4) - 0.5) * 0.08 })));
@@ -1969,6 +2116,7 @@ function redcoatPose(t, sd) {
   }
   const shift = 0.25 * S, stand = () => shiftPose(basePose(), shift);
   let P;
+  if (tt >= T.march) return marchOff(tt, sd, carry(stand(), 'ready'));
   if (tt < T.halt + 0.34) {
     const w = smooth(invLerp(T.halt, T.halt + 0.34, tt));
     P = mixPose(carry(walkPose(dH, S), 'shoulder'), carry(stand(), 'shoulder'), w);
@@ -1978,6 +2126,15 @@ function redcoatPose(t, sd) {
   else if (tt < T.fire + 1.1) P = recoil(mixPose(carry(stand(), 'ready'), carry(stand(), 'present', { ang: -0.1 }), smooth(invLerp(T.aim, T.aim + 0.3, tt))), tt - T.fire);
   else P = mixPose(carry(stand(), 'present', { ang: -0.1 }), carry(stand(), 'ready'), smooth(invLerp(T.fire + 1.1, T.fire + 1.6, tt)));
   return { P, x: sd.x };
+}
+// After the skirmish the regulars shoulder arms and march on toward Concord.
+function marchOff(tt, sd, from) {
+  const { T, S, v } = LEX, shift = 0.25 * S, w = smooth(invLerp(T.march, T.march + 0.45, tt));
+  const d = v * Math.max(0, tt - T.march - 0.45);
+  const shoulder = carry(shiftPose(basePose(), shift), 'shoulder');
+  if (tt < T.march + 0.45) return { P: mixPose(from, shoulder, w), x: sd.x };
+  const P = carry(walkPose(d, S), 'shoulder'), k = smooth(invLerp(0, 0.5, d / v));
+  return { P: k < 1 ? mixPose(shoulder, shiftPose(P, shift * (1 - k)), k) : P, x: sd.x + (shift * k + d) * sd.s };
 }
 function officerPose(t) {
   const { T, S, v, s0 } = LEX, o = LEX.officer, dH = v * (T.halt - s0);
@@ -1990,6 +2147,11 @@ function officerPose(t) {
     return P;
   };
   if (t < T.halt) { const d = v * (t - s0); return { P: withSword(walkPose(d, S)), x: o.x - (dH - d) * o.s }; }
+  if (t >= T.march) {                          // sword back to the carry, and on to Concord
+    const m = marchOff(t, o, shiftPose(basePose(), 0.25 * S)), P = m.P, sh = shoulderOf(P, false), k = smooth(invLerp(T.march, T.march + 0.45, t));
+    P.nh = lerp2([sh[0] + 58, sh[1] + 8], [sh[0] + 22, sh[1] + 40], k); P.ne = [-1, 0.4]; P.sword = { ang: lerp(-0.2, -1.45, k) };
+    return m;
+  }
   const w = smooth(invLerp(T.halt, T.halt + 0.34, t));
   const P = mixPose(walkPose(dH, S), shiftPose(basePose(), 0.25 * S), w);
   P.ff = [P.ff[0], P.ff[1] - 11 * Math.sin(Math.PI * w)];
@@ -1998,6 +2160,10 @@ function officerPose(t) {
 }
 function militiaPose(t, m) {
   const T = LEX.T, tr = T.reply + m.j;
+  if (t > T.flee + m.j) {                       // scatter: turn and run for the trees
+    const P = walkPose((t - T.flee - m.j) * 190, 150); P.lean = 0.2;
+    return carry(P, 'trail', { bayonet: false });
+  }
   const idle = 0.02 + 0.015 * Math.sin((t + m.j * 10) * 1.9);
   const ready = () => { const P = basePose(); P.lean = idle - 0.12 * pulse(t, T.fire + 0.05, 0.05, 0.6); P.head = 0.03; return carry(P, 'ready', { bayonet: false }); };
   const present = () => { const P = basePose(); P.lean = idle; return carry(P, 'present', { bayonet: false, ang: 0.08 }); };
@@ -2026,10 +2192,17 @@ function drawLexington(g, t, lt, tick) {
   LEX_LAYERS.bg.draw(g, tick);
   // Far side of the green: militia behind a stone wall. Near side: the redcoats.
   const far = [], near = [];
+  // The alarm bell swings in the belfry until the regulars arrive.
+  const sw = 0.55 * Math.sin(lt * 4.6) * (1 - smooth(invLerp(7, 9, lt)));
+  g.save(); g.translate(182, 656); g.rotate(sw);
+  g.fillStyle = lit('#6f5a34', L); g.beginPath(); g.moveTo(-12, 30); g.quadraticCurveTo(-11, 6, -6, 4); g.lineTo(6, 4); g.quadraticCurveTo(11, 6, 12, 30); g.closePath(); g.fill();
+  g.strokeStyle = L.ink; g.lineWidth = 2; g.stroke(); g.fillStyle = '#1d1c22'; g.fillRect(-2, 0, 4, 5);
+  g.restore();
   LEX.militia.forEach((m, i) => {
-    const F = { x: m.x, y: m.y, s: m.s, dir: -1, outfit: m.outfit, seed: m.seed, light: L };
-    drawFigure(g, F, militiaPose(t, m), tick);
-    far.push({ at: T.reply + m.j, m: lexMuzzle('m' + i, F, militiaPose(T.reply + m.j + 0.001, m)), dir: -1, seed: 20 + i });
+    const run = t > T.flee + m.j, x = run ? m.x + (t - T.flee - m.j) * 190 * m.s : m.x;
+    const F = { x, y: m.y, s: m.s, dir: run ? 1 : -1, outfit: m.outfit, seed: m.seed, light: L };
+    if (x < 1260) drawFigure(g, F, militiaPose(t, m), tick);
+    far.push({ at: T.reply + m.j, m: lexMuzzle('m' + i, { ...F, x: m.x, dir: -1 }, militiaPose(T.reply + m.j + 0.001, m)), dir: -1, seed: 20 + i });
   });
   LEX_LAYERS.wall.draw(g, tick);
   for (const f of far) drawSmoke(g, PUFFS, tick, f.m[0] - 14, f.m[1], t - f.at, { dir: -1, wind: 22, seed: f.seed, n: 5, size: 0.62, life: 7, rise: 4, alpha: 0.9 });
@@ -2037,21 +2210,22 @@ function drawLexington(g, t, lt, tick) {
   LEX.reds.forEach((sd, i) => {
     if (sd.rank === 1 && !LEX.reds[i - 1].rank) {       // officer between the ranks
       const o = officerPose(t);
-      drawFigure(g, { x: o.x, y: LEX.officer.y, s: LEX.officer.s, dir: 1, outfit: 'redcoat', seed: LEX.officer.seed, light: L }, o.P, tick);
+      if (o.x > -260 && o.x < 1300) drawFigure(g, { x: o.x, y: LEX.officer.y, s: LEX.officer.s, dir: 1, outfit: 'redcoat', seed: LEX.officer.seed, light: L }, o.P, tick);
     }
     const { P, x } = redcoatPose(t, sd);
     const F = { x, y: sd.y, s: sd.s, dir: 1, outfit: 'redcoat', seed: sd.seed, light: L };
-    drawFigure(g, F, P, tick);
+    if (x > -260 && x < 1300) drawFigure(g, F, P, tick);
     near.push({ at: T.fire + sd.j, m: lexMuzzle('r' + i, F, redcoatPose(T.fire + sd.j + 0.001, sd).P), dir: 1, seed: i + 1 });
   });
   for (const f of near) drawSmoke(g, PUFFS, tick, f.m[0] + 22, f.m[1], t - f.at, { dir: 1, wind: 24, seed: f.seed, n: 6, size: 1.05, life: 7, rise: 5, alpha: 0.92 });
   for (const f of near) drawFlash(g, f.m[0] + 8, f.m[1], t - f.at, 1, 1.2);
 }
 function camLexington(lt, t) {
-  const T = LEX.T, s0 = LEX.s0, a = T.halt - s0;
-  const z = track([[0, 1.16], [a - 0.8, 1.14], [a + 1.2, 1.0], [11, 1.035]])(lt);
-  const x = track([[0, 330], [a - 0.8, 385], [a + 1.2, 540], [11, 552]])(lt);
-  const y = track([[0, 1188], [a - 0.8, 1175], [a + 1.2, 1040], [11, 1052]])(lt);
+  const T = LEX.T, s0 = LEX.s0, a = T.halt - s0, dur = durOf('lexington');
+  // Open on the belfry, find the militia, then swing left to meet the column.
+  const z = track([[0, 1.24], [3, 1.22], [a - 3.2, 1.16], [a - 0.8, 1.14], [a + 1.2, 1.0], [dur, 1.04]])(lt);
+  const x = track([[0, 400], [3, 660], [a - 3.2, 330], [a - 0.8, 385], [a + 1.2, 540], [T.march - s0, 548], [dur, 590]])(lt);
+  const y = track([[0, 900], [3, 1140], [a - 3.2, 1188], [a - 0.8, 1175], [a + 1.2, 1040], [dur, 1060]])(lt);
   let amp = 0;
   for (const [tc, k] of [[T.fire, 14], [T.reply, 7]]) if (t > tc) amp += k * Math.exp(-(t - tc) * 6);
   return { z, x: x + amp * vnoise(t * 29, 4), y: y + amp * vnoise(t * 31, 5), rot: amp * 0.001 * vnoise(t * 23, 6) };
@@ -2091,7 +2265,7 @@ function* buildDecBg(g, rng) {
 }
 const DEC_LAYER = new BoilLayer({ name: 'decBg', box: { x0: -20, y0: -80, x1: 1100, y1: 2640 }, res: 0.6, seed: 401, build: buildDecBg });
 const DEC = (() => {
-  const s0 = sceneById.declaration.start, c = k => cue('declaration', k) - s0;
+  const s0 = sceneById.declaration.start, c = k => cue('declaration', k) - s0, dur = durOf('declaration');
   const INK = '#23150c';
   const runs = [];            // each: { kind: 'text'|'path', ..., t0, t1 } in scene seconds
   let laid = false;
@@ -2133,7 +2307,7 @@ const DEC = (() => {
     for (let u = 0; u <= 1.0001; u += 0.02) fl.push([540 + hw / 2 - 10 - u * (hw + 40) + 26 * Math.sin(u * 9) * (1 - u), hy + 26 + 20 * Math.sin(u * Math.PI) + 8 * Math.sin(u * 14)]);
     item(c('sign'), c('others') - 0.3, [...sig, { kind: 'path', pts: fl, w: hw * 0.45, width: 4.2 }]);
     const names = [['Josiah Bartlett', 290, 118], ['Th Jefferson', 540, 128], ['Benj. Franklin', 790, 118], ['John Adams', 290, 206], ['Saml Adams', 540, 216], ['Roger Sherman', 790, 206]];
-    item(c('others'), 11.35, names.flatMap(([n, x, dy]) => textLines(g, n, fit(g, n, `44px ${SCRIPT}`, 230), x, hy + dy, 0, 2000, 'center')));
+    item(c('others'), dur - 0.65, names.flatMap(([n, x, dy]) => textLines(g, n, fit(g, n, `44px ${SCRIPT}`, 230), x, hy + dy, 0, 2000, 'center')));
     DEC.hy = hy; DEC.tEnd = tEnd;
   }
   // Where the nib is at time `lt` (scene seconds).
@@ -2148,7 +2322,7 @@ const DEC = (() => {
       if (lt <= r.t1) return { ...pointIn(r, invLerp(r.t0, r.t1, lt)), writing: true };
       prev = r;
     }
-    const e = endOf(prev); return { x: lerp(e[0], 1150, smooth(invLerp(11.4, 12, lt))), y: e[1] - 60 * smooth(invLerp(11.4, 12, lt)), writing: false };
+    const e = endOf(prev), u = smooth(invLerp(dur - 0.6, dur, lt)); return { x: lerp(e[0], 1150, u), y: e[1] - 60 * u, writing: false };
   }
   const left = r => (r.align === 'center' ? r.x - r.w / 2 : r.x);
   const startOf = r => (r.kind === 'text' ? [left(r), r.y - r.size * 0.3] : r.pts.find(Boolean));
@@ -2190,9 +2364,9 @@ const DEC = (() => {
 function drawDeclaration(g, t, lt, tick) { DEC.layout(g); DEC_LAYER.draw(g, tick); DEC.draw(g, lt, tick); }
 function camDeclaration(lt) {
   DEC.layout(ctx);
-  const c = DEC.c, hy = DEC.hy, te = DEC.tEnd;
-  const y = track([[0, 900], [c('preamble') - 0.2, 905], [c('truths'), 1000], [c('more'), te - 120], [c('sign') + 0.2, hy - 60], [c('others'), hy - 10], [12, hy + 50]])(lt);
-  const z = track([[0, 1.0], [c('truths'), 1.035], [c('more'), 1.035], [c('sign') + 0.2, 1.0], [12, 1.02]])(lt);
+  const c = DEC.c, hy = DEC.hy, te = DEC.tEnd, dur = durOf('declaration');
+  const y = track([[0, 900], [c('preamble') - 0.2, 905], [c('truths'), 1000], [c('more'), te - 120], [c('sign') + 0.2, hy - 60], [c('others'), hy - 10], [dur, hy + 50]])(lt);
+  const z = track([[0, 1.0], [c('truths'), 1.035], [c('more'), 1.035], [c('sign') + 0.2, 1.0], [dur, 1.02]])(lt);
   return { z, x: 540, y, rot: 0 };
 }
 
@@ -2384,14 +2558,14 @@ function drawDelaware(g, t, lt, tick) {
     g.stroke();
   }
 }
-function camDelaware(lt) { const u = smooth(lt / 12); return { z: lerp(1.1, 1.15, u), x: lerp(548, 532, u), y: lerp(1124, 1112, u), rot: 0 }; }
+function camDelaware(lt) { const u = smooth(clamp(lt / durOf('delaware'))); return { z: lerp(1.1, 1.15, u), x: lerp(548, 532, u), y: lerp(1124, 1112, u), rot: 0 }; }
 
 /* ===================== scene 6 — surrender at Yorktown, 1781 =============== */
 const YK = (() => {
   const s0 = sceneById.yorktown.start, S = 118, cyc = 1.8, s = 1.18, v = S / cyc * s;          // px per second
   const stopX = 4 * S * s, gap = 2.1;
   const men = [];
-  for (let i = -3; i <= 5; i++) men.push({ i, at: 0.9 + gap * i, seed: 120 + i + 3 });
+  for (let i = -3; 0.9 + gap * i < durOf('yorktown'); i++) men.push({ i, at: 0.9 + gap * i, seed: 120 + i + 3 });
   const slots = [];
   const r = mulberry32(808);
   for (let k = 0; k < 30; k++) {
@@ -2526,7 +2700,7 @@ function drawYorktown(g, t, lt, tick) {
   for (let k = 0; k < Math.min(pile, Y.slots.length); k++) drawLooseMusket(g, Y.slots[k].b, Y.slots[k].m, tick, L, k);
   for (const [b, m, k] of flying) drawLooseMusket(g, b, m, tick, L, k + 100);
 }
-function camYorktown(lt) { const u = smooth(lt / 12); return { z: lerp(1.16, 1.22, u), x: lerp(540, 562, u), y: lerp(1158, 1184, u), rot: 0 }; }
+function camYorktown(lt) { const u = smooth(clamp(lt / durOf('yorktown'))); return { z: lerp(1.16, 1.22, u), x: lerp(540, 562, u), y: lerp(1158, 1184, u), rot: 0 }; }
 
 /* ======================= scene 7 — peace, 1783 ============================= */
 function* buildPeaceBg(g, rng) {
@@ -2596,7 +2770,7 @@ function* buildPeaceBg(g, rng) {
 }
 const PEACE_LAYER = new BoilLayer({ name: 'peaceBg', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.7, seed: 701, build: buildPeaceBg });
 function drawPeace(g, t, lt, tick) {
-  const s = sceneById.peace, dur = s.end - s.start;
+  const s = sceneById.finale, dur = s.end - s.start;
   PEACE_LAYER.draw(g, tick);
   // Birds.
   g.strokeStyle = '#2b2622'; g.lineWidth = 2.6; g.lineCap = 'round';
@@ -2606,51 +2780,44 @@ function drawPeace(g, t, lt, tick) {
   }
   drawPole(g, 884, 470, 1530, tick, LIGHTS.day, 9);
   drawFlag(g, FLAGS.us, tick, 880, 478, 470, 308, lt, { dir: -1, amp: 22, waves: 1.35, speed: 0.9, droop: 0.04 });
-  // "The United States of America" on a ribbon that unrolls from the centre.
-  const u = easeOut3(invLerp(s.cues.title * dur, s.cues.title * dur + 1.1, lt));
-  if (u > 0) {
-    const cx = 540, cy = 250, half = 440 * u, rng = mulberry32(hash3(tick, 71));
-    const band = [];
-    for (let k = 0; k <= 24; k++) { const x = cx - half + 2 * half * k / 24; band.push([x, cy - 58 + 30 * ((x - cx) / 440) ** 2]); }
-    for (let k = 24; k >= 0; k--) { const x = cx - half + 2 * half * k / 24; band.push([x, cy + 50 + 30 * ((x - cx) / 440) ** 2]); }
-    for (const sgn of [-1, 1]) {
-      const ex = cx + sgn * half, tail = [[ex - sgn * 10, cy - 20], [ex + sgn * 70, cy - 12], [ex + sgn * 44, cy + 40], [ex + sgn * 80, cy + 92], [ex - sgn * 10, cy + 84]];
-      g.fillStyle = '#b89968'; g.beginPath(); polyPath(g, tail); g.fill();
-      g.globalCompositeOperation = 'multiply'; g.fillStyle = pat('shade', tick, 3); g.fill(); g.globalCompositeOperation = 'source-over';
-      sketchLine(g, tail.concat([tail[0]]), rng, 1, '#3a2616', 2.2, 0.9);
-    }
-    g.fillStyle = '#efe0bb'; g.beginPath(); polyPath(g, band); g.fill();
-    g.globalCompositeOperation = 'multiply'; g.fillStyle = pat('grain', tick, 5); g.fill(); g.globalCompositeOperation = 'source-over';
-    g.fillStyle = pat('lift', tick, 6); g.fill();
-    sketchLine(g, band.concat([band[0]]), rng, 1, '#3a2616', 2.6, 0.95);
-    g.save(); g.beginPath(); polyPath(g, band); g.clip();
-    g.fillStyle = '#23160e'; g.font = `62px ${SERIF}`; g.textBaseline = 'middle';
-    const text = 'The United States of America', R = 440 * 440 / 60;
-    const chars = [...text], ws = chars.map(ch => g.measureText(ch).width), tot = ws.reduce((a, b) => a + b, 0) + 2 * (chars.length - 1);
-    let a = -tot / 2;
-    // Letters follow the ribbon's curve (it dips 30px at x = ±440, a circle of radius R).
-    chars.forEach((ch, i) => { const x = a + ws[i] / 2; g.save(); g.translate(cx + x, cy - 4 + x * x / (2 * R)); g.rotate(Math.atan(x / R)); g.fillText(ch, -ws[i] / 2, 0); g.restore(); a += ws[i] + 2; });
-    g.restore();
-    g.textBaseline = 'alphabetic';
-  }
+  // "The United States of America" on a ribbon that unrolls from the centre, and
+  // later "The End" on a second one below.
+  drawRibbon(g, tick, 540, 250, easeOut3(invLerp(s.cues.title * dur, s.cues.title * dur + 1.1, lt)), 'The United States of America', `62px ${SERIF}`);
+  drawRibbon(g, tick, 540, 1560, easeOut3(invLerp(s.cues.end * dur, s.cues.end * dur + 1.2, lt)), 'The End', `104px ${SCRIPT}`, { w: 300, dip: 22, seed: 73, ty: 8 });
 }
-function camPeace(lt) { return { z: lerp(1.0, 1.05, smooth(lt / 11)), x: 540, y: lerp(965, 935, smooth(lt / 11)), rot: 0 }; }
+function camPeace(lt) { const u = smooth(clamp(lt / durOf('finale'))); return { z: lerp(1.0, 1.05, u), x: 540, y: lerp(965, 935, u), rot: 0 }; }
 
 /* ============================ scenes registry ============================== */
-const SCN = {
-  colonies:    { layers: [MAP_LAYER, MAPSHIP, STAMP, CARD], draw: drawColonies, cam: camColonies },
+Object.assign(SCN, {
+  colonies:    { layers: [MAP_LAYER, MAPSHIP], draw: drawColonies, cam: camColonies },
   tea:         { layers: [TEA_LAYERS.sky, TEA_LAYERS.water, TEA_LAYERS.back, TEA_LAYERS.front, TEA_LAYERS.chest], draw: drawTea, cam: camTea },
   lexington:   { layers: [LEX_LAYERS.bg, LEX_LAYERS.wall, ...PUFFS], draw: drawLexington, cam: camLexington },
   declaration: { layers: [DEC_LAYER], draw: drawDeclaration, cam: camDeclaration },
   delaware:    { layers: [DEL_LAYERS.sky, DEL_LAYERS.bank, DEL_LAYERS.river, DEL_LAYERS.back, DEL_LAYERS.front, ...DEL_LAYERS.floes, FLAGS.union], draw: drawDelaware, cam: camDelaware },
   yorktown:    { layers: [YORK_LAYER, FLAGS.us, FLAGS.fr], draw: drawYorktown, cam: camYorktown },
-  peace:       { layers: [PEACE_LAYER], draw: drawPeace, cam: camPeace },
-};
+  finale:      { layers: [PEACE_LAYER, FLAGS.us], draw: drawPeace, cam: camPeace },
+});
+// A plain title card for any scene that has no drawing yet.
+for (const s of SCENES) {
+  if (SCN[s.id]) continue;
+  SCN[s.id] = {
+    layers: [],
+    cam: () => ({ z: 1, x: 540, y: 960, rot: 0 }),
+    draw(g, t, lt, tick) {
+      g.fillStyle = '#2b1d13'; g.textAlign = 'center';
+      g.font = `44px ${SERIF_SC}`; spacedText(g, s.label.toUpperCase(), 540, 820, 6);
+      g.font = `italic 72px ${SERIF}`; wrapText(g, SCENE_NAMES[s.id], 900).forEach((l, i) => g.fillText(l, 540, 930 + i * 84));
+      g.textAlign = 'left';
+    },
+  };
+}
+registerLayers([CARD]);
 
 /* ============================ captions ===================================== */
 function drawCaption(g, sc, t, lt, tick) {
+  if (!CAPTIONS[sc.id]) return;
   const dur = sc.end - sc.start, [date, line] = CAPTIONS[sc.id];
-  const t0 = sc.id === 'colonies' ? 1.5 : 0.75, t1 = sc.id === 'peace' ? dur + 1 : dur - 0.35;
+  const t0 = sc.id === 'colonies' ? 1.5 : 0.75, t1 = dur - 0.35;
   const a = Math.min(smooth(invLerp(t0, t0 + 0.45, lt)), 1 - smooth(invLerp(t1 - 0.3, t1, lt)));
   if (a <= 0.003) return;
   g.save();
@@ -2894,7 +3061,8 @@ function buildInstruments() {
   return N;
 }
 
-// The score, written against the same SCENES/cues the animation uses.
+// The score, written against the same SCENES/cues the animation uses. Each scene's
+// music lives in SCORE[id] and gets a toolkit of instruments plus its own beat clock.
 function buildScore(N) {
   const ev = [];
   const one = (t, fn) => ev.push({ t, fn, dur: 0, sustain: false });
@@ -2902,145 +3070,194 @@ function buildScore(N) {
   const fife = (t, note, dur, vel = 0.6) => one(t, time => N.fife(note, time, dur * 0.9, vel));
   const pz = (t, note, vel = 0.7, dur = 0.3) => one(t, time => N.pz(note, time, vel, dur));
   const glock = (t, note, vel = 0.4, dur = 1) => one(t, time => N.glock(note, time, vel, dur));
+  const bell = (t, note, vel = 0.5, dur = 3) => one(t, time => N.bell(note, time, vel, dur));
   const sn = (t, v) => one(t, time => N.snare(time, v));
   const flam = (t, v) => { sn(t - 0.028, v * 0.45); sn(t, v); };
   const roll = (t0, t1, v0, v1, rate = 0.045) => { for (let t = t0; t < t1 - 1e-3; t += rate) sn(t, lerp(v0, v1, invLerp(t0, t1, t))); };
   const bd = (t, v, note) => one(t, time => N.bd(time, v, note));
+  const str = (t, dur, notes, vel = 0.4) => one(t, time => N.str(notes, time, dur, vel));
   const strH = (t, dur, notes, vel) => hold(t, dur, (time, into) => N.strOn(notes, time, into, dur, vel));
-  const mel = (B, list, vel, oct = 0) => { for (const [b, n, d] of list) fife(B(b), oct ? window.Tone.Frequency(n).transpose(12 * oct).toNote() : n, d * (B(1) - B(0)), vel); };
-
-  // 1765 — drum roll, the fife tune, the colony names on the glockenspiel, then the Stamp Act.
-  {
-    const id = 'colonies', B = beatOf(id), b = beatLen(id), s = sceneById[id];
-    roll(B(0) + 0.05, B(2) - 0.05, 0.1, 0.6, b / 8);
-    bd(B(2), 0.75);
-    const tune = [[2, 'A4', 0.5], [2.5, 'D5', 0.5], [3, 'F#5', 0.5], [3.5, 'A5', 0.5], [4, 'G5', 0.5], [4.5, 'F#5', 0.5], [5, 'E5', 0.5], [5.5, 'D5', 0.5],
-      [6, 'E5', 0.5], [6.5, 'F#5', 0.5], [7, 'G5', 0.5], [7.5, 'E5', 0.5], [8, 'F#5', 1], [9, 'D5', 1],
-      [10, 'A4', 0.5], [10.5, 'D5', 0.5], [11, 'F#5', 0.5], [11.5, 'A5', 0.5], [12, 'B5', 0.5], [12.5, 'A5', 0.5], [13, 'G5', 0.5], [13.5, 'F#5', 0.5]];
-    mel(B, tune, 0.62);
-    for (const [bb, n] of [[4, 'A5'], [8, 'G5'], [12, 'C#6']]) fife(B(bb) - b / 8, n, b / 9, 0.4);            // grace notes
-    ['G6', 'E6', 'F#6', 'A6', 'D6', 'F#6', 'A5', 'D6', 'F#6', 'A6', 'B6', 'A6', 'G6'].forEach((n, k) => glock(COL.nameT[k], n, 0.42, 0.9));
-    for (let bb = 2; bb < 14; bb++) { if (bb % 2 === 0) flam(B(bb), 0.55); else sn(B(bb), 0.45); sn(B(bb + 0.5), 0.22); }
-    roll(B(9.5), B(10) - 0.02, 0.25, 0.5, b / 8); roll(B(13.5), B(14) - 0.02, 0.25, 0.6, b / 8);
-    for (let bb = 4; bb < 14; bb += 2) bd(B(bb), 0.5);
-    [['D3', 'A2'], ['G2', 'D3'], ['A2', 'E3'], ['D3', 'A2'], ['D3', 'F#3'], ['G2', 'D3']].forEach(([r5, f5], k) => { pz(B(2 + 2 * k), r5, 0.7); pz(B(3 + 2 * k), f5, 0.55); });
-    strH(B(2), B(8) - B(2), ['D3', 'A3', 'F#4'], 0.22);
-    strH(B(8), B(14) - B(8) - 0.1, ['D3', 'A3', 'D4'], 0.2);
-    // The stamp.
-    one(COL.T.stamp, time => N.thunk(time)); bd(COL.T.stamp, 1, 'A1');
-    strH(COL.T.stamp, s.end - COL.T.stamp + 0.4, ['D3', 'F3', 'A3', 'D4'], 0.4);
-    ['D2', 'C3', 'Bb2', 'A2'].forEach((n, k) => pz(B(14 + k), n, 0.85, 0.5));
-    sn(B(16), 0.2); sn(B(17), 0.25);
-  }
-  // 1773 — a sneaking pizzicato in D minor; whooshes and splashes as the chests go over.
-  {
-    const id = 'tea', B = beatOf(id), b = beatLen(id), s = sceneById[id];
-    hold(s.start, s.end - s.start, (time, into) => N.harbourOn(time, into, s.end - s.start));
-    const bars = [['D3', 'A2', 'D3', 'F3'], ['E3', 'A2', 'C#3', 'E3'], ['D3', 'A2', 'D3', 'F3'], ['G3', 'D3', 'Bb2', 'D3'], ['F3', 'D3', 'A2', 'D3'], ['Bb2', 'F3', 'D3', 'F3'], ['A2', 'E3', 'C#3', 'E3'], ['D3', 'A2', 'D2', null]];
-    bars.forEach((bar, k) => bar.forEach((n, j) => { if (n) pz(B(2 * k + 0.5 * j), n, j ? 0.5 : 0.68, 0.22); }));
-    mel(B, [[4, 'A4', 0.5], [4.5, 'D5', 0.5], [5, 'E5', 0.5], [5.5, 'F5', 0.5], [6, 'G5', 0.5], [6.5, 'F5', 0.5], [7, 'E5', 0.5], [7.5, 'D5', 0.5],
-      [8, 'F5', 0.5], [8.5, 'E5', 0.5], [9, 'D5', 0.5], [9.5, 'A4', 0.5], [10, 'Bb4', 0.5], [10.5, 'D5', 0.5], [11, 'F5', 0.5], [11.5, 'D5', 0.5],
-      [12, 'E5', 0.5], [12.5, 'C#5', 0.5], [13, 'A4', 0.5], [13.5, 'C#5', 0.5], [14, 'D5', 1.5]], 0.42);
-    for (let bb = 0; bb < 16; bb++) sn(B(bb + 0.5), 0.14);
-    strH(B(8), B(16) - B(8) - 0.2, ['D3', 'A3', 'F4'], 0.18);
-    for (const c of TEA.chests) { one(c.r - 0.05, time => N.whoosh(time, 0.5)); one(c.land, time => N.splash(time, 0.7)); }
-    pz(B(15.5), 'D2', 0.8, 0.6);
-  }
-  // 1775 — march in, halt… make ready… present… FIRE. The reply. A lament.
-  {
-    const id = 'lexington', B = beatOf(id), b = beatLen(id), T = LEX.T;
-    for (let bb = 0; bb < 6; bb++) { flam(B(bb), 0.55); sn(B(bb + 0.5), 0.3); sn(B(bb + 0.75), 0.22); if (bb % 2 === 0) { bd(B(bb), 0.65); pz(B(bb), 'D2', 0.6, 0.4); } }
-    mel(B, [[0, 'D5', 1], [1, 'F5', 0.5], [1.5, 'E5', 0.5], [2, 'D5', 0.5], [2.5, 'C5', 0.5], [3, 'A4', 1], [4, 'Bb4', 0.5], [4.5, 'A4', 0.5], [5, 'G4', 0.5], [5.5, 'E4', 0.5]], 0.58);
-    flam(T.halt, 0.75); bd(T.halt, 0.8); fife(T.halt, 'D4', b * 0.6, 0.45);
-    strH(T.halt + 0.1, T.fire - T.halt - 0.15, ['A2', 'E3'], 0.34);
-    LEX.reds.forEach((r, k) => { one(T.ready + r.j + 0.05 + k * 0.03, time => N.click(time, 0.55)); one(T.ready + r.j + 0.2 + k * 0.03, time => N.click(time, 0.45)); });
-    bd(T.ready, 0.25); bd(T.aim, 0.3);
-    strH(T.aim, T.fire - T.aim - 0.06, ['E5', 'F5'], 0.14);
-    roll(T.aim + b * 0.5, T.fire - 0.05, 0.08, 0.45, 0.04);
-    one(T.fire, time => N.volley(time, 7, 0.09, 1));
-    one(T.fire + 0.42, time => N.volley(time, 3, 0.06, 0.28));
-    LEX.militia.forEach(m => one(T.reply + m.j, time => N.volley(time, 1, 0, 0.8)));
-    strH(T.reply + 0.3, sceneById[id].end - T.reply + 0.2, ['D3', 'F3', 'A3', 'D4'], 0.36);
-    mel(B, [[12, 'A4', 1], [13, 'D5', 1], [14, 'F5', 1.5], [15.5, 'E5', 0.5]], 0.45);
-    for (const bb of [12, 14]) { sn(B(bb), 0.25); sn(B(bb) + 0.06, 0.2); sn(B(bb) + 0.12, 0.3); }
-    pz(B(12), 'D2', 0.6, 0.8); pz(B(14), 'Bb1', 0.55, 0.8);
-  }
-  // July 1776 — a bell, a hymn, the scratch of the quill, and a flourish.
-  {
-    const id = 'declaration', B = beatOf(id), b = beatLen(id), s = sceneById[id];
-    DEC.layout(ctx);
-    one(B(0) + 0.02, time => N.bell('D3', time, 0.8, 4)); one(B(8), time => N.bell('D3', time, 0.55, 4));
-    const ch = [[0, ['D3', 'F#3', 'A3', 'D4']], [2, ['G2', 'D3', 'G3', 'B3']], [4, ['F#2', 'D3', 'A3', 'D4']], [6, ['A2', 'E3', 'A3', 'C#4']], [8, ['D3', 'A3', 'D4', 'F#4']], [10, ['B2', 'F#3', 'B3', 'D4']], [12, ['G2', 'D3', 'G3', 'B3']], [13, ['A2', 'E3', 'G3', 'C#4']]];
-    ch.forEach(([bb, notes], k) => { const d = (k < ch.length - 1 ? ch[k + 1][0] : 14) - bb; one(B(bb), time => N.str(notes, time, d * b + 0.15, 0.5)); });
-    strH(B(14), s.end - B(14) + 0.5, ['D2', 'A2', 'D3', 'F#3', 'A3'], 0.5);
-    for (const [bb, n, d] of [[2, 'A4', 1], [3, 'D5', 1], [4, 'F#5', 1], [5, 'A5', 1], [6, 'G5', 2], [8, 'F#5', 1], [9, 'E5', 1], [10, 'D5', 2], [12, 'B4', 1], [13, 'C#5', 1], [14, 'D5', 2]]) one(B(bb), time => N.brass(n, time, d * b * 0.95, 0.56));
-    const qr = mulberry32(99);
-    for (const r of DEC.runs) {
-      for (let t = r.t0; t < r.t1; t += 0.085 + 0.06 * qr()) one(s.start + t, time => N.quill(time, 0.22 + 0.18 * qr()));
-    }
-    const sig = DEC.runs.filter(r => r.kind === 'text' && r.t0 >= DEC.c('others') - 0.01);
-    sig.forEach((r, k) => glock(s.start + r.t0, ['A5', 'D6', 'F#6', 'E6', 'A6', 'D7'][k % 6], 0.3, 0.8));
-    one(s.start + DEC.c('others') - 0.28, time => N.bell('A3', time, 0.5, 3));
-  }
-  // December 1776 — wind and ice; a drumbeat for each pull of the oars; hope at the far shore.
-  {
-    const id = 'delaware', B = beatOf(id), b = beatLen(id), s = sceneById[id], dur = s.end - s.start;
-    hold(s.start, dur, (time, into) => N.windOn(time, into, dur));
-    hold(s.start, dur + 0.3, (time, into) => N.droneOn(['D2', 'A2'], time, into, dur + 0.3, 0.55));
-    for (let k = 0; DEL.first + k * DEL.period < s.end - 0.3; k++) {
-      const t = DEL.first + k * DEL.period;
-      bd(t, 0.42, 'G1'); one(t + 0.05, time => N.splash(time, 0.22));
-      sn(t + b * 0.5, 0.16); sn(t + b * 0.5 + 0.05, 0.12); sn(t + b * 0.5 + 0.1, 0.2);
-    }
-    mel(B, [[2, 'A4', 1], [3, 'D5', 1], [4, 'E5', 1], [5, 'F5', 1], [6, 'E5', 2], [8, 'D5', 1], [9, 'C5', 1], [10, 'D5', 2], [12, 'F#5', 1.5], [13.5, 'E5', 0.5], [14, 'D5', 1]], 0.42);
-    strH(DEL.shore, s.end - DEL.shore + 0.3, ['D3', 'F#3', 'A3', 'D4'], 0.36);
-    ['A5', 'D6', 'F#6', 'A6'].forEach((n, k) => glock(DEL.shore + 0.1 + k * 0.16, n, 0.3, 1.2));
-    const ir = mulberry32(5);
-    for (let t = s.start + 0.8; t < s.end - 0.5; t += 0.5 + 0.9 * ir()) one(t, time => N.click(time, 0.12 + 0.12 * ir()));
-    roll(B(14.5), s.end - 0.04, 0.08, 0.6, 0.042);
-  }
-  // 1781 — "Yankee Doodle" for the surrender; muskets clatter onto the pile.
-  {
-    const id = 'yorktown', B = beatOf(id), b = beatLen(id), s = sceneById[id];
-    const verse = [[0, 'D5', .5], [.5, 'D5', .5], [1, 'E5', .5], [1.5, 'F#5', .5], [2, 'D5', .5], [2.5, 'F#5', .5], [3, 'E5', .5], [3.5, 'A4', .5],
-      [4, 'D5', .5], [4.5, 'D5', .5], [5, 'E5', .5], [5.5, 'F#5', .5], [6, 'D5', 1], [7, 'C#5', 1],
-      [8, 'D5', .5], [8.5, 'D5', .5], [9, 'E5', .5], [9.5, 'F#5', .5], [10, 'G5', .5], [10.5, 'F#5', .5], [11, 'E5', .5], [11.5, 'D5', .5],
-      [12, 'C#5', .5], [12.5, 'A4', .5], [13, 'B4', .5], [13.5, 'C#5', .5], [14, 'D5', 1], [15, 'D5', 1]];
-    const chorus = [[16, 'B4', .5], [16.5, 'C#5', .5], [17, 'B4', .5], [17.5, 'A4', .5], [18, 'B4', .5], [18.5, 'C#5', .5], [19, 'D5', 1],
-      [20, 'A4', .5], [20.5, 'B4', .5], [21, 'A4', .5], [21.5, 'G4', .5], [22, 'F#4', 1], [23, 'A4', 1],
-      [24, 'B4', .5], [24.5, 'C#5', .5], [25, 'B4', .5], [25.5, 'A4', .5], [26, 'B4', .5], [26.5, 'C#5', .5], [27, 'D5', .5], [27.5, 'B4', .5],
-      [28, 'A4', .5], [28.5, 'D5', .5], [29, 'C#5', .5], [29.5, 'E5', .5], [30, 'D5', 1], [31, 'D5', 1]];
-    mel(B, verse.concat(chorus), 0.56, 1);
-    for (const [bb, n, d] of chorus) glock(B(bb), n, 0.22, d * b * 1.5);
-    const harm = ['D', 'A', 'D', 'A', 'D', 'G', 'A', 'D', 'G', 'D', 'A', 'D', 'G', 'D', 'A', 'D'];
-    const R = { D: ['D2', 'A2'], A: ['A1', 'E2'], G: ['G1', 'D2'] }, C = { D: ['D3', 'F#3', 'A3'], A: ['C#3', 'E3', 'A3'], G: ['D3', 'G3', 'B3'] };
-    harm.forEach((h, k) => {
-      pz(B(2 * k), R[h][0], 0.72, 0.25); pz(B(2 * k + 1), R[h][1], 0.55, 0.25);
-      bd(B(2 * k), k % 4 === 0 ? 0.7 : 0.5);
-      if (k >= 8) one(B(2 * k), time => N.str(C[h], time, 2 * b + 0.1, 0.3));
-    });
-    for (let bb = 0; bb < 32; bb++) { if (bb % 2 === 0) flam(B(bb), 0.5); else sn(B(bb), 0.42); sn(B(bb + 0.5), 0.22); }
-    roll(B(14.5), B(15.5), 0.25, 0.55, b / 6); roll(B(30.5), B(31.4), 0.25, 0.7, b / 6);
-    bd(B(31.5), 0.9); flam(B(31.5), 0.75);
-    for (const man of YK.men) { const t = s.start + man.at + 0.6 + 0.34; if (t > s.start && t < s.end) one(t, time => N.clatter(time, 0.55)); }
-  }
-  // 1783 — a broad statement of the opening tune, bells, birdsong, and the fade.
-  {
-    const id = 'peace', B = beatOf(id), b = beatLen(id), s = sceneById[id], fadeAt = s.start + (s.end - s.start) * s.cues.fade;
-    one(B(0) + 0.02, time => N.bell('D3', time, 0.6, 5));
-    ['D5', 'A5', 'D6'].forEach((n, k) => glock(B(0) + k * 0.12, n, 0.3, 1.5));
-    for (const [bb, d, notes] of [[0, 4, ['D3', 'A3', 'D4', 'F#4']], [4, 2, ['G2', 'D3', 'G3', 'B3']], [6, 2, ['D3', 'A3', 'D4', 'F#4']], [8, 2, ['A2', 'E3', 'G3', 'C#4']]]) one(B(bb), time => N.str(notes, time, d * b + 0.2, 0.52));
-    strH(B(10), s.end - B(10) + 1, ['D2', 'A2', 'D3', 'F#3', 'A3', 'E4'], 0.55);
-    for (const [bb, n, d] of [[0, 'A4', 1], [1, 'D5', 1], [2, 'F#5', 1], [3, 'A5', 1], [4, 'B5', 2], [6, 'A5', 1], [7, 'F#5', 1], [8, 'G5', 1], [9, 'E5', 1]]) one(B(bb), time => N.brass([n, window.Tone.Frequency(n).transpose(-12).toNote()], time, d * b * 0.95, 0.6));
-    hold(B(10), s.end - B(10) + 0.5, (time, into) => { const d = s.end - B(10) + 0.5 - into; if (d > 0.05) N.brass(['D5', 'A4', 'F#4', 'D4'], time, d, 0.52); });
-    ['D6', 'F#6', 'A6', 'D7'].forEach((n, k) => glock(B(10) + k * 0.14, n, 0.34, 2));
-    one(B(10), time => N.bell('D3', time, 0.5, 5));
-    roll(B(9), B(10) - 0.03, 0.08, 0.5, 0.045); bd(B(10), 0.7);
-    for (const bb of [2.2, 2.35, 3.4, 5.1, 5.24, 7.6, 11.5, 11.65, 13.2]) one(B(bb), time => N.chirp(time));
-    hold(fadeAt + 1, FILM_END + 0.35 - (fadeAt + 1), (time, into) => N.fadeOut(time, into, FILM_END + 0.35 - (fadeAt + 1)));
+  const brass = (t, dur, notes, vel = 0.5) => one(t, time => N.brass(notes, time, dur, vel));
+  const up = (n, k) => window.Tone.Frequency(n).transpose(k).toNote();
+  const K = { N, ev, one, hold, fife, pz, glock, bell, sn, flam, roll, bd, str, strH, brass, up };
+  for (const s of SCENES) {
+    if (!SCORE[s.id]) continue;
+    const B = beatOf(s.id), b = beatLen(s.id);
+    // A melody as [beat, note, beats] rows, on the fife (or any voice via `play`).
+    const mel = (list, vel, oct = 0, play = null) => { for (const [bb, n, d] of list) { const note = oct ? up(n, 12 * oct) : n; play ? play(B(bb), note, d * b, vel) : fife(B(bb), note, d * b, vel); } };
+    SCORE[s.id](K, { id: s.id, s, B, b, dur: s.end - s.start, mel });
   }
   return ev.sort((a, b) => a.t - b.t);
 }
+
+// 1763 — drum roll, the fife tune, the colony names on the glockenspiel; the Proclamation
+// Line in a darker key, and a British ship.
+SCORE.colonies = (K, { B, b, s, mel }) => {
+  const { N, one, fife, pz, glock, sn, flam, roll, bd, strH, brass } = K;
+  roll(B(0) + 0.05, B(2) - 0.05, 0.1, 0.6, b / 8);
+  bd(B(2), 0.75);
+  mel([[2, 'A4', 0.5], [2.5, 'D5', 0.5], [3, 'F#5', 0.5], [3.5, 'A5', 0.5], [4, 'G5', 0.5], [4.5, 'F#5', 0.5], [5, 'E5', 0.5], [5.5, 'D5', 0.5],
+    [6, 'E5', 0.5], [6.5, 'F#5', 0.5], [7, 'G5', 0.5], [7.5, 'E5', 0.5], [8, 'F#5', 1], [9, 'D5', 1],
+    [10, 'A4', 0.5], [10.5, 'D5', 0.5], [11, 'F#5', 0.5], [11.5, 'A5', 0.5], [12, 'B5', 0.5], [12.5, 'A5', 0.5], [13, 'G5', 0.5], [13.5, 'F#5', 0.5],
+    [14, 'G5', 0.5], [14.5, 'E5', 0.5], [15, 'F#5', 0.5], [15.5, 'D5', 0.5], [16, 'E5', 1], [17, 'D5', 1]], 0.62);
+  for (const [bb, n] of [[4, 'A5'], [8, 'G5'], [12, 'C#6'], [16, 'F#5']]) fife(B(bb) - b / 8, n, b / 9, 0.4);            // grace notes
+  ['G6', 'E6', 'F#6', 'A6', 'D6', 'F#6', 'A5', 'D6', 'F#6', 'A6', 'B6', 'A6', 'G6'].forEach((n, k) => glock(COL.nameT[k], n, 0.42, 0.9));
+  for (let bb = 2; bb < 18; bb++) { if (bb % 2 === 0) flam(B(bb), 0.55); else sn(B(bb), 0.45); sn(B(bb + 0.5), 0.22); }
+  roll(B(9.5), B(10) - 0.02, 0.25, 0.5, b / 8); roll(B(13.5), B(14) - 0.02, 0.25, 0.6, b / 8); roll(B(17.5), B(18) - 0.02, 0.3, 0.7, b / 8);
+  for (let bb = 4; bb < 18; bb += 2) bd(B(bb), 0.5);
+  bd(B(18), 0.75);
+  [['D3', 'A2'], ['G2', 'D3'], ['A2', 'E3'], ['D3', 'A2'], ['D3', 'F#3'], ['G2', 'D3'], ['A2', 'E3'], ['D3', 'A2']].forEach(([r5, f5], k) => { pz(B(2 + 2 * k), r5, 0.7); pz(B(3 + 2 * k), f5, 0.55); });
+  strH(B(2), B(8) - B(2), ['D3', 'A3', 'F#4'], 0.22);
+  strH(B(8), B(14) - B(8), ['D3', 'A3', 'D4'], 0.2);
+  strH(B(14), B(18) - B(14) + 0.1, ['A2', 'E3', 'C#4'], 0.2);
+  // The line across the mountains: D minor, a walking pizzicato.
+  strH(B(19), B(26) - B(19), ['D3', 'F3', 'A3'], 0.24);
+  ['D2', 'A2', 'F2', 'A2', 'D2', 'A2', 'Bb1', 'F2', 'G1', 'D2', 'A1', 'E2', 'A1', 'C#2'].forEach((n, k) => pz(B(19 + 0.5 * k), n, k % 2 ? 0.45 : 0.62, 0.25));
+  one(B(19), time => N.bell('D3', time, 0.35, 4));
+  // A British man-of-war sails in.
+  for (const [bb, n, d] of [[26, ['D3', 'A3'], 1.5], [27.5, ['F3', 'A3'], 0.5], [28, ['E3', 'G3'], 1], [29, ['D3', 'F3'], 1], [30, ['C#3', 'E3', 'A3'], 2]]) brass(B(bb), d * b * 0.95, n, 0.42);
+  strH(B(26), B(32) - B(26), ['D2', 'A2'], 0.2);
+  for (let bb = 26; bb < 32; bb++) { sn(B(bb), 0.18 + 0.02 * (bb - 26)); sn(B(bb + 0.5), 0.12); }
+  strH(B(32), s.end - B(32) + 0.2, ['A2', 'E3', 'G3', 'C#4'], 0.26);
+  roll(B(32), s.end - 0.05, 0.1, 0.62, 0.045);
+  pz(B(32), 'A1', 0.8, 0.8); bd(B(34), 0.5); bd(B(35), 0.6);
+};
+
+// 1773 — a sneaking pizzicato in D minor, twice round; whooshes and splashes as the chests go over.
+SCORE.tea = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, pz, glock, sn, strH, up } = K;
+  hold(s.start, dur, (time, into) => N.harbourOn(time, into, dur));
+  const bars = [['D3', 'A2', 'D3', 'F3'], ['E3', 'A2', 'C#3', 'E3'], ['D3', 'A2', 'D3', 'F3'], ['G3', 'D3', 'Bb2', 'D3'], ['F3', 'D3', 'A2', 'D3'], ['Bb2', 'F3', 'D3', 'F3'], ['A2', 'E3', 'C#3', 'E3'], ['D3', 'A2', 'D2', null]];
+  for (const off of [0, 16]) bars.forEach((bar, k) => bar.forEach((n, j) => { if (n) pz(B(off + 2 * k + 0.5 * j), n, j ? 0.5 : 0.68, 0.22); }));
+  const tune = [[4, 'A4', 0.5], [4.5, 'D5', 0.5], [5, 'E5', 0.5], [5.5, 'F5', 0.5], [6, 'G5', 0.5], [6.5, 'F5', 0.5], [7, 'E5', 0.5], [7.5, 'D5', 0.5],
+    [8, 'F5', 0.5], [8.5, 'E5', 0.5], [9, 'D5', 0.5], [9.5, 'A4', 0.5], [10, 'Bb4', 0.5], [10.5, 'D5', 0.5], [11, 'F5', 0.5], [11.5, 'D5', 0.5],
+    [12, 'E5', 0.5], [12.5, 'C#5', 0.5], [13, 'A4', 0.5], [13.5, 'C#5', 0.5], [14, 'D5', 1.5]];
+  mel(tune, 0.42);
+  mel(tune.map(([bb, n, d]) => [bb + 16, n, d]), 0.46);
+  for (const [bb, n, d] of tune) glock(B(bb + 16), up(n, 12), 0.16, d * b * 1.4);
+  for (let bb = 0; bb < 34; bb++) sn(B(bb + 0.5), 0.14);
+  strH(B(8), B(16) - B(8) - 0.2, ['D3', 'A3', 'F4'], 0.18);
+  strH(B(20), B(32) - B(20), ['D3', 'A3', 'D4', 'F4'], 0.22);
+  for (const c of TEA.chests) { one(c.r - 0.05, time => N.whoosh(time, 0.5)); one(c.land, time => N.splash(time, 0.7)); }
+  strH(B(32), s.end - B(32) + 0.2, ['D3', 'F3', 'A3'], 0.2);
+  pz(B(32), 'D2', 0.8, 0.8); pz(B(33.5), 'A1', 0.6, 0.4); pz(B(34), 'D2', 0.7, 0.6);
+};
+
+// April 1775 — the alarm bell; the column's drums getting louder; halt… make ready… present… FIRE.
+// The reply. A lament, then the drums again as the regulars march on.
+SCORE.lexington = (K, { B, b, s, mel }) => {
+  const { N, one, fife, pz, sn, flam, roll, bd, strH } = K, T = LEX.T;
+  for (let k = 0; k < 11; k++) one(B(k) + 0.02, time => N.bell(k % 2 ? 'C#4' : 'A3', time, lerp(0.55, 0.12, k / 10), 2.5));
+  for (let bb = 4; bb < 14; bb++) {
+    const v = lerp(0.1, 0.6, (bb - 4) / 10);
+    flam(B(bb), v); sn(B(bb + 0.5), v * 0.55); sn(B(bb + 0.75), v * 0.4);
+    if (bb % 2 === 0) { bd(B(bb), v); pz(B(bb), 'D2', v, 0.4); }
+  }
+  mel([[8, 'D5', 1], [9, 'F5', 0.5], [9.5, 'E5', 0.5], [10, 'D5', 0.5], [10.5, 'C5', 0.5], [11, 'A4', 1], [12, 'Bb4', 0.5], [12.5, 'A4', 0.5], [13, 'G4', 0.5], [13.5, 'E4', 0.5]], 0.5);
+  flam(T.halt, 0.75); bd(T.halt, 0.8); fife(T.halt, 'D4', b * 0.6, 0.45);
+  strH(T.halt + 0.1, T.fire - T.halt - 0.15, ['A2', 'E3'], 0.34);
+  LEX.reds.forEach((r, k) => { one(T.ready + r.j + 0.05 + k * 0.03, time => N.click(time, 0.55)); one(T.ready + r.j + 0.2 + k * 0.03, time => N.click(time, 0.45)); });
+  bd(T.ready, 0.25); bd(T.aim, 0.3);
+  strH(T.aim, T.fire - T.aim - 0.06, ['E5', 'F5'], 0.14);
+  roll(T.aim + b * 0.5, T.fire - 0.05, 0.08, 0.45, 0.04);
+  one(T.fire, time => N.volley(time, 7, 0.09, 1));
+  one(T.fire + 0.42, time => N.volley(time, 3, 0.06, 0.28));
+  LEX.militia.forEach(m => one(T.reply + m.j, time => N.volley(time, 1, 0, 0.8)));
+  strH(T.reply + 0.3, T.march - T.reply + 0.4, ['D3', 'F3', 'A3', 'D4'], 0.36);
+  mel([[22, 'A4', 1], [23, 'D5', 1], [24, 'F5', 1.5], [25.5, 'E5', 0.5], [26, 'D5', 1]], 0.45);
+  for (const bb of [22, 24]) { sn(B(bb), 0.25); sn(B(bb) + 0.06, 0.2); sn(B(bb) + 0.12, 0.3); }
+  pz(B(22), 'D2', 0.6, 0.8); pz(B(24), 'Bb1', 0.55, 0.8);
+  // On to Concord: the march again, drawing away.
+  for (let bb = 27; bb < 32; bb++) { const v = lerp(0.5, 0.2, (bb - 27) / 5); flam(B(bb), v); sn(B(bb + 0.5), v * 0.5); sn(B(bb + 0.75), v * 0.35); if (bb % 2) bd(B(bb), v); }
+  mel([[27, 'D5', 1], [28, 'F5', 0.5], [28.5, 'E5', 0.5], [29, 'D5', 0.5], [29.5, 'C5', 0.5], [30, 'A4', 1], [31, 'D4', 1]], 0.36);
+  strH(B(27), s.end - B(27) + 0.2, ['D2', 'A2', 'F3'], 0.22);
+};
+
+// July 1776 — a bell, a hymn twice over, the scratch of the quill, and a flourish.
+SCORE.declaration = (K, { B, b, s }) => {
+  const { N, one, glock, bell, str, strH, brass } = K;
+  DEC.layout(ctx);
+  bell(B(0) + 0.02, 'D3', 0.8, 4); bell(B(8), 'D3', 0.55, 4); bell(B(16), 'D3', 0.65, 4);
+  const ch = [[0, ['D3', 'F#3', 'A3', 'D4']], [2, ['G2', 'D3', 'G3', 'B3']], [4, ['F#2', 'D3', 'A3', 'D4']], [6, ['A2', 'E3', 'A3', 'C#4']], [8, ['D3', 'A3', 'D4', 'F#4']], [10, ['B2', 'F#3', 'B3', 'D4']], [12, ['G2', 'D3', 'G3', 'B3']], [13, ['A2', 'E3', 'G3', 'C#4']], [14, ['D3', 'A3', 'D4', 'F#4']]];
+  for (const off of [0, 16]) ch.forEach(([bb, notes], k) => { const d = (k < ch.length - 1 ? ch[k + 1][0] : 16) - bb; str(B(off + bb), d * b + 0.15, off ? notes.concat([K.up(notes[3], 12)]) : notes, off ? 0.55 : 0.5); });
+  strH(B(30), s.end - B(30) + 0.5, ['D2', 'A2', 'D3', 'F#3', 'A3'], 0.5);
+  const tune = [[2, 'A4', 1], [3, 'D5', 1], [4, 'F#5', 1], [5, 'A5', 1], [6, 'G5', 2], [8, 'F#5', 1], [9, 'E5', 1], [10, 'D5', 2], [12, 'B4', 1], [13, 'C#5', 1], [14, 'D5', 2]];
+  for (const [bb, n, d] of tune) brass(B(bb), d * b * 0.95, n, 0.56);
+  for (const [bb, n, d] of tune) brass(B(bb + 16), d * b * 0.95, [n, K.up(n, -12)], 0.6);
+  const qr = mulberry32(99);
+  for (const r of DEC.runs) for (let t = r.t0; t < r.t1; t += 0.085 + 0.06 * qr()) one(s.start + t, time => N.quill(time, 0.22 + 0.18 * qr()));
+  const sig = DEC.runs.filter(r => r.kind === 'text' && r.t0 >= DEC.c('others') - 0.01);
+  sig.forEach((r, k) => glock(s.start + r.t0, ['A5', 'D6', 'F#6', 'E6', 'A6', 'D7'][k % 6], 0.3, 0.8));
+  bell(s.start + DEC.c('sign') - 0.1, 'A3', 0.45, 3);
+  bell(s.start + DEC.c('others') - 0.28, 'D3', 0.5, 4);
+};
+
+// December 1776 — wind and ice; a drumbeat for each pull of the oars; hope at the far shore.
+SCORE.delaware = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, glock, sn, roll, bd, strH } = K;
+  hold(s.start, dur, (time, into) => N.windOn(time, into, dur));
+  hold(s.start, dur + 0.3, (time, into) => N.droneOn(['D2', 'A2'], time, into, dur + 0.3, 0.55));
+  for (let k = 0; DEL.first + k * DEL.period < s.end - 0.3; k++) {
+    const t = DEL.first + k * DEL.period;
+    bd(t, 0.42, 'G1'); one(t + 0.05, time => N.splash(time, 0.22));
+    sn(t + b * 0.5, 0.16); sn(t + b * 0.5 + 0.05, 0.12); sn(t + b * 0.5 + 0.1, 0.2);
+  }
+  mel([[2, 'A4', 1], [3, 'D5', 1], [4, 'E5', 1], [5, 'F5', 1], [6, 'E5', 2], [8, 'D5', 1], [9, 'C5', 1], [10, 'D5', 2], [12, 'F5', 1.5], [13.5, 'E5', 0.5], [14, 'D5', 1], [15, 'A4', 1], [16, 'G4', 1], [17, 'A4', 1],
+    [18, 'D5', 1], [19, 'F#5', 1], [20, 'A5', 1.5], [21.5, 'G5', 0.5], [22, 'F#5', 1], [23, 'D5', 1]], 0.42);
+  strH(DEL.shore, s.end - DEL.shore + 0.3, ['D3', 'F#3', 'A3', 'D4'], 0.36);
+  ['A5', 'D6', 'F#6', 'A6'].forEach((n, k) => glock(DEL.shore + 0.1 + k * 0.16, n, 0.3, 1.2));
+  const ir = mulberry32(5);
+  for (let t = s.start + 0.8; t < s.end - 0.5; t += 0.5 + 0.9 * ir()) one(t, time => N.click(time, 0.12 + 0.12 * ir()));
+  roll(B(22.5), s.end - 0.04, 0.08, 0.6, 0.042);
+};
+
+// October 1781 — "Yankee Doodle", twice through, for the surrender; muskets clatter onto the pile.
+SCORE.yorktown = (K, { B, b, s, mel }) => {
+  const { N, one, pz, glock, sn, flam, roll, bd, str, brass } = K;
+  const verse = [[0, 'D5', .5], [.5, 'D5', .5], [1, 'E5', .5], [1.5, 'F#5', .5], [2, 'D5', .5], [2.5, 'F#5', .5], [3, 'E5', .5], [3.5, 'A4', .5],
+    [4, 'D5', .5], [4.5, 'D5', .5], [5, 'E5', .5], [5.5, 'F#5', .5], [6, 'D5', 1], [7, 'C#5', 1],
+    [8, 'D5', .5], [8.5, 'D5', .5], [9, 'E5', .5], [9.5, 'F#5', .5], [10, 'G5', .5], [10.5, 'F#5', .5], [11, 'E5', .5], [11.5, 'D5', .5],
+    [12, 'C#5', .5], [12.5, 'A4', .5], [13, 'B4', .5], [13.5, 'C#5', .5], [14, 'D5', 1], [15, 'D5', 1]];
+  const chorus = [[16, 'B4', .5], [16.5, 'C#5', .5], [17, 'B4', .5], [17.5, 'A4', .5], [18, 'B4', .5], [18.5, 'C#5', .5], [19, 'D5', 1],
+    [20, 'A4', .5], [20.5, 'B4', .5], [21, 'A4', .5], [21.5, 'G4', .5], [22, 'F#4', 1], [23, 'A4', 1],
+    [24, 'B4', .5], [24.5, 'C#5', .5], [25, 'B4', .5], [25.5, 'A4', .5], [26, 'B4', .5], [26.5, 'C#5', .5], [27, 'D5', .5], [27.5, 'B4', .5],
+    [28, 'A4', .5], [28.5, 'D5', .5], [29, 'C#5', .5], [29.5, 'E5', .5], [30, 'D5', 1], [31, 'D5', 1]];
+  const song = verse.concat(chorus);
+  mel(song, 0.56, 1);
+  mel(song.map(([bb, n, d]) => [bb + 32, n, d]), 0.6, 1);
+  for (const [bb, n, d] of chorus) glock(B(bb), n, 0.22, d * b * 1.5);
+  for (const [bb, n, d] of chorus) glock(B(bb + 32), K.up(n, 12), 0.2, d * b * 1.5);
+  for (const [bb, n, d] of verse.filter((_, i) => i % 2 === 0)) brass(B(bb + 32), d * b * 1.8, [n, K.up(n, -12)], 0.34);
+  const harm = ['D', 'A', 'D', 'A', 'D', 'G', 'A', 'D', 'G', 'D', 'A', 'D', 'G', 'D', 'A', 'D'];
+  const R = { D: ['D2', 'A2'], A: ['A1', 'E2'], G: ['G1', 'D2'] }, C = { D: ['D3', 'F#3', 'A3'], A: ['C#3', 'E3', 'A3'], G: ['D3', 'G3', 'B3'] };
+  for (const off of [0, 32]) harm.forEach((h, k) => {
+    pz(B(off + 2 * k), R[h][0], 0.72, 0.25); pz(B(off + 2 * k + 1), R[h][1], 0.55, 0.25);
+    bd(B(off + 2 * k), k % 4 === 0 ? 0.7 : 0.5);
+    if (off || k >= 8) str(B(off + 2 * k), 2 * b + 0.1, C[h], off ? 0.34 : 0.3);
+  });
+  for (let bb = 0; bb < 64; bb++) { if (bb % 2 === 0) flam(B(bb), 0.5); else sn(B(bb), 0.42); sn(B(bb + 0.5), 0.22); }
+  for (const bb of [14.5, 30.5, 46.5]) roll(B(bb), B(bb + 1), 0.25, 0.55, b / 6);
+  roll(B(62.5), B(63.4), 0.25, 0.7, b / 6);
+  bd(B(63.5), 0.9); flam(B(63.5), 0.75);
+  for (const man of YK.men) { const t = s.start + man.at + 0.6 + 0.34; if (t > s.start && t < s.end) one(t, time => N.clatter(time, 0.55)); }
+};
+
+// The End — a broad statement of the opening tune, bells, birdsong, and the fade.
+SCORE.finale = (K, { B, b, s }) => {
+  const { N, one, hold, glock, bell, sn, roll, bd, str, strH, brass } = K;
+  const fadeAt = s.start + (s.end - s.start) * s.cues.fade;
+  bell(B(0) + 0.02, 'D3', 0.6, 5);
+  ['D5', 'A5', 'D6'].forEach((n, k) => glock(B(0) + k * 0.12, n, 0.3, 1.5));
+  for (const [bb, d, notes] of [[0, 4, ['D3', 'A3', 'D4', 'F#4']], [4, 2, ['G2', 'D3', 'G3', 'B3']], [6, 2, ['D3', 'A3', 'D4', 'F#4']], [8, 2, ['A2', 'E3', 'G3', 'C#4']]]) str(B(bb), d * b + 0.2, notes, 0.52);
+  strH(B(10), s.end - B(10) + 1, ['D2', 'A2', 'D3', 'F#3', 'A3', 'E4'], 0.55);
+  for (const [bb, n, d] of [[0, 'A4', 1], [1, 'D5', 1], [2, 'F#5', 1], [3, 'A5', 1], [4, 'B5', 2], [6, 'A5', 1], [7, 'F#5', 1], [8, 'G5', 1], [9, 'E5', 1]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.6);
+  hold(B(10), s.end - B(10) + 0.5, (time, into) => { const d = s.end - B(10) + 0.5 - into; if (d > 0.05) N.brass(['D5', 'A4', 'F#4', 'D4'], time, d, 0.52); });
+  ['D6', 'F#6', 'A6', 'D7'].forEach((n, k) => glock(B(10) + k * 0.14, n, 0.34, 2));
+  bell(B(10), 'D3', 0.5, 5);
+  roll(B(9), B(10) - 0.03, 0.08, 0.5, 0.045); bd(B(10), 0.7);
+  for (const bb of [2.2, 2.35, 3.4, 5.1, 5.24, 7.6, 11.5, 11.65, 13.2]) one(B(bb), time => N.chirp(time));
+  hold(fadeAt + 1, FILM_END + 0.35 - (fadeAt + 1), (time, into) => N.fadeOut(time, into, FILM_END + 0.35 - (fadeAt + 1)));
+};
 async function ensureAudio() {
   if (AUDIO.ready) return true;
   if (AUDIO.failed) return false;
@@ -3069,17 +3286,33 @@ const $ = id => document.getElementById(id);
 const canvas = $('film');
 const ctx = canvas.getContext('2d', { alpha: false });
 const params = new URLSearchParams(location.search);
-const player = { ready: false, playing: false, recording: false, poster: true, audioClock: false, req: 0, t: CONFIG.posterTime, mapA: 0, mapT: 0, perf0: 0, last: 0, dirty: true };
+const player = { ready: false, playing: false, recording: false, poster: true, audioClock: false, req: 0, t: CONFIG.posterTime, mapA: 0, mapT: 0, perf0: 0, last: 0, dirty: true, busy: 0 };
 const rec = { mr: null, chunks: [], mime: '', dest: null, keep: null, blob: null, ext: 'webm' };
 
 function audioClock() {
   const raw = window.Tone.getContext().rawContext;
   return raw.currentTime - (player.recording ? 0 : (raw.baseLatency || 0) + 0.02);
 }
+// Before playing from a scene whose drawings were dropped (or never made), draw one
+// pass of each of its layers behind the paper veil.
+async function readyScene(idx, min, label) {
+  planLayers(idx);
+  if (SCN[SCENES[idx].id].layers.every(L => L.ready.length >= Math.min(min, L.passes))) return;
+  const veil = $('loading'), bar = veil.querySelector('i');
+  veil.querySelector('span').textContent = label; bar.style.width = '0%';
+  const show = setTimeout(() => { veil.hidden = false; }, 120);
+  await prepareScene(idx, min, p => { bar.style.width = (100 * p) + '%'; });
+  clearTimeout(show); veil.hidden = true;
+}
 async function playFrom(t0) {
   const req = ++player.req;
   $('intro').hidden = true; player.poster = false;
   hideToast();
+  if (player.playing) { player.playing = false; if (AUDIO.ready) { window.Tone.getTransport().stop(); AUDIO.N.silence(); } }
+  player.t = t0; player.busy++;
+  try { await readyScene(sceneIndexAt(t0), player.recording ? 3 : 1, 'Drawing the scene…'); } finally { player.busy--; }
+  player.dirty = true;
+  if (req !== player.req) return;
   const ok = await ensureAudio();
   if (ok && window.Tone.getContext().state !== 'running') {    // resume() may still be settling
     await Promise.race([AUDIO.resuming || Promise.resolve(), new Promise(r => setTimeout(r, 1200))]);
@@ -3087,7 +3320,6 @@ async function playFrom(t0) {
   if (req !== player.req) return;                       // a newer Play/Seek arrived while audio was starting
   const live = ok && window.Tone.getContext().state === 'running';
   if (ok) { window.Tone.getTransport().stop(); AUDIO.N.silence(); }
-  flushScene(sceneAt(t0).id);                           // the scene we start in must be drawn already
   player.t = t0; player.mapT = t0; player.perf0 = performance.now(); player.last = player.perf0;
   player.audioClock = live;
   if (live) {
@@ -3148,10 +3380,12 @@ function tick(now) {
     if (player.t >= stopAt) { player.t = FILM_END; finish(); }
     player.dirty = true;
   }
-  if (player.dirty) { render(ctx, Math.min(player.t, FILM_END), { poster: player.poster }); player.dirty = false; }
+  const cur = sceneIndexAt(player.poster ? CONFIG.posterTime : Math.min(player.t, FILM_END));
+  planLayers(cur);
+  if (player.dirty && !player.busy) { render(ctx, Math.min(player.t, FILM_END), { poster: player.poster }); player.dirty = false; }
   updateClock();
-  // Keep drawing the scenes that aren't ready yet, a slice at a time.
-  if (JOBS.length && !player.recording) pumpJobs(player.playing ? 5 : 12, sceneAt(player.poster ? 0 : player.t).id);
+  // Keep drawing the coming scenes, a slice at a time (also while recording).
+  if (JOBS.length) pumpJobs(player.recording ? 6 : player.playing ? 7 : 14, cur);
 }
 
 // Recording: canvas frames + the Tone.js master output, muxed by MediaRecorder.
@@ -3165,7 +3399,7 @@ function pickMime() {
 async function startRecording() {
   const mime = pickMime();
   if (mime === null || !canvas.captureStream) { toast('This browser can’t record video. Try Chrome, Edge, Firefox or Safari 14.1+.'); return; }
-  if (JOBS.length) { toast('Getting every scene ready…'); await new Promise(r => setTimeout(r, 30)); flushAll(); hideToast(); }
+  await readyScene(0, 3, 'Getting ready to record…');
   const ok = await ensureAudio();
   const tracks = [...canvas.captureStream(CONFIG.recordFps).getVideoTracks()];
   if (ok) {
@@ -3229,25 +3463,37 @@ function toast(msg, ms = 0, action = null) {
 }
 function hideToast() { $('toast').hidden = true; }
 
-// Scene timeline (tap a scene to jump to it).
-const SCENE_NAMES = { colonies: 'The Stamp Act', tea: 'The Boston Tea Party', lexington: 'Lexington and Concord', declaration: 'The Declaration of Independence', delaware: 'Crossing the Delaware', yorktown: 'Yorktown', peace: 'The Treaty of Paris' };
+// Scene bar: the current scene's date and name, previous/next, and a strip with one
+// segment per scene (tap one to jump to it).
+const jumpTo = i => { if (!player.ready || player.recording) return; unlockAudio(); playFrom(SCENES[clamp(i, 0, SCENES.length - 1)].start); };
+const nowIndex = () => (player.poster ? -1 : sceneIndexAt(clamp(player.t, 0, FILM_END - 1e-6)));
 const segs = SCENES.map((s, i) => {
   const b = document.createElement('button');
   b.className = 'seg'; b.type = 'button'; b.style.flexGrow = s.end - s.start;
-  b.setAttribute('aria-label', `Scene ${i + 1}: ${SCENE_NAMES[s.id] || s.label}, ${s.start}–${s.end} seconds`);
-  b.innerHTML = `<span>${s.label}</span><span class="trk"><i></i></span>`;
-  b.addEventListener('click', () => { if (player.ready && !player.recording) { unlockAudio(); playFrom(s.start); } });
+  b.title = `${s.label} · ${SCENE_NAMES[s.id]}`;
+  b.setAttribute('aria-label', `Scene ${i + 1} of ${SCENES.length}: ${SCENE_NAMES[s.id]}, ${s.label}`);
+  b.innerHTML = '<i><b></b></i>';
+  b.addEventListener('click', () => jumpTo(i));
   $('timeline').appendChild(b);
   return b;
 });
+$('prevBtn').addEventListener('click', () => { const i = nowIndex(), s = SCENES[Math.max(0, i)]; jumpTo(i < 0 ? 0 : player.t - s.start > 2 ? i : i - 1); });
+$('nextBtn').addEventListener('click', () => jumpTo(nowIndex() + 1));
+const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+let shownScene = null;
 function updateClock() {
-  const t = player.poster ? 0 : clamp(player.t, 0, FILM_END);
-  $('clock').textContent = `${t.toFixed(1)} / ${FILM_END.toFixed(1)}`;
-  SCENES.forEach((s, i) => {
-    segs[i].querySelector('i').style.width = (100 * invLerp(s.start, s.end, t)) + '%';
-    segs[i].classList.toggle('on', !player.poster && t >= s.start && t < s.end);
+  const t = player.poster ? 0 : clamp(player.t, 0, FILM_END), i = nowIndex(), sc = SCENES[Math.max(0, i)];
+  $('clock').textContent = `${mmss(t)} / ${mmss(FILM_END)}`;
+  SCENES.forEach((s, k) => {
+    segs[k].querySelector('b').style.width = (100 * invLerp(s.start, s.end, t)) + '%';
+    segs[k].classList.toggle('on', k === i);
   });
-  if (player.recording) $('recTime').textContent = 'REC ' + t.toFixed(1);
+  if (shownScene !== sc.id) {
+    shownScene = sc.id;
+    $('nowDate').textContent = `${SCENES.indexOf(sc) + 1} / ${SCENES.length} · ${sc.label}`;
+    $('nowName').textContent = SCENE_NAMES[sc.id];
+  }
+  if (player.recording) $('recTime').textContent = 'REC ' + mmss(t);
 }
 function syncUI() {
   $('playLabel').textContent = player.playing ? 'Pause' : 'Play';
@@ -3255,7 +3501,7 @@ function syncUI() {
   $('playIcon').setAttribute('d', player.playing ? 'M6 4h4v16H6zM14 4h4v16h-4z' : 'M6 3.8c0-.9 1-1.5 1.8-1l13 8.2c.7.5.7 1.5 0 2L7.8 21.2c-.8.5-1.8-.1-1.8-1z');
   $('recBtn').classList.toggle('on', player.recording);
   $('recLabel').textContent = player.recording ? 'Stop' : 'Record';
-  $('playBtn').disabled = $('restartBtn').disabled = player.recording;
+  $('playBtn').disabled = $('restartBtn').disabled = $('prevBtn').disabled = $('nextBtn').disabled = player.recording;
 }
 function togglePlay() {
   if (!player.ready || player.recording) return;
@@ -3274,7 +3520,8 @@ window.addEventListener('keydown', e => {
   if (e.target.closest && e.target.closest('input, textarea')) return;
   if (e.code === 'Space') { e.preventDefault(); if (!player.playing) unlockAudio(); togglePlay(); }
   else if (e.key === 'r' || e.key === 'R') $('restartBtn').click();
-  else if (/^[1-9]$/.test(e.key) && SCENES[+e.key - 1] && player.ready && !player.recording) { unlockAudio(); playFrom(SCENES[+e.key - 1].start); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); $('prevBtn').click(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); $('nextBtn').click(); }
 });
 
 function layout() {
@@ -3295,17 +3542,10 @@ async function init() {
   PAPER = makePaper(); TOOTH = makeTooth(); VIGNETTE = makeVignette(ctx);
   makePatterns(ctx);
   await fontsReady();
-  const seen = new Set();
-  for (const s of SCENES) for (const L of SCN[s.id].layers) if (!seen.has(L)) { seen.add(L); queueLayer(L, s.id); }
   const still = params.has('t');
   const t0 = still ? clamp(parseFloat(params.get('t')) || 0, 0, FILM_END) : CONFIG.posterTime;
-  const first = JOBS.filter(j => j.scene === sceneAt(t0).id), total = first.length;
-  let done = 0;
-  for (const j of first) {
-    while (!stepJob(j, performance.now() + 40)) { if (!still) await new Promise(r => setTimeout(r, 0)); }
-    done++; $('loading').querySelector('i').style.width = (100 * done / total) + '%';
-    if (!still) await new Promise(r => setTimeout(r, 0));
-  }
+  if (still) flushScene(sceneIndexAt(t0));
+  else await prepareScene(sceneIndexAt(t0), 3, p => { $('loading').querySelector('i').style.width = (100 * p) + '%'; });
   $('loading').hidden = true;
   player.ready = true;
   if (still) { player.t = t0; player.poster = false; document.body.dataset.still = '1'; }
@@ -3318,8 +3558,10 @@ requestAnimationFrame(tick);
 const ready = init();
 // Hooks for automated checks: render any moment deterministically.
 window.__film = {
-  ready, SCENES, cue, render: (t, o) => render(ctx, t, o), audio: { buildInstruments, buildScore }, flushAll, jobs: () => JOBS.length, jobStats: JOB_STATS,
-  layers: () => { const seen = new Set(), out = []; for (const s of SCENES) for (const L of SCN[s.id].layers) if (!seen.has(L)) { seen.add(L); out.push({ name: L.name, scene: s.id, px: L.variants.reduce((a, c) => a + (c ? c.width * c.height : 0), 0), n: L.ready.length }); } return out; },
+  ready, SCENES, cue, audio: { buildInstruments, buildScore }, jobs: () => JOBS.length, jobStats: JOB_STATS,
+  render: (t, o) => { planLayers(sceneIndexAt(t)); render(ctx, t, o); },
+  prepare: t => flushScene(sceneIndexAt(t)),
+  layers: () => [...LAYER_USE].map(([L, uses]) => ({ name: L.name, scene: SCENES[uses[0]].id, px: L.variants.reduce((a, c) => a + (c ? c.width * c.height : 0), 0), n: L.ready.length })),
 };
 })();
 </script>
