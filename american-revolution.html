@@ -5631,6 +5631,11 @@ const jonShipBox = sp => ({ x0: -sp.L / 2 - 12, y0: -sp.H - sp.L * 0.62 * Math.m
 function* buildJonesSky(g, rng) {
   const box = { x0: -170, y0: -90, x1: 1250, y1: 1640 }, hz = 1180, moon = [660, 470];
   const dm = (x, y) => Math.hypot(x - moon[0], (y - moon[1]) * 1.1);
+  const gs = g.createLinearGradient(0, box.y0, 0, hz); gs.addColorStop(0, '#0d1120'); gs.addColorStop(1, '#1a2034');
+  g.fillStyle = gs; g.fillRect(box.x0, box.y0, box.x1 - box.x0, hz + 4 - box.y0);
+  const gh = g.createRadialGradient(moon[0], moon[1], 50, moon[0], moon[1], 400); gh.addColorStop(0, 'rgba(110,122,150,0.8)'); gh.addColorStop(1, 'rgba(40,50,74,0)');
+  g.fillStyle = gh; g.fillRect(moon[0] - 400, moon[1] - 400, 800, 800);
+  g.fillStyle = '#0d1220'; g.fillRect(box.x0, hz, box.x1 - box.x0, box.y1 - hz);
   // The night sky: long, nearly level strokes in close blues, lifting toward the moon.
   yield* pencilG(g, rng, { ...box, y1: hz + 4 }, (x, y) => dm(x, y) > 62, (x, y) => clamp(0.22 + 0.22 * smooth(clamp((y - 100) / 1080)) + 0.07 * fbm(x * 0.0018, y * 0.004, 2311)),
     ['#0a0e1a', '#0f1422', '#141a2c', '#1a2236', '#212a40'], { angle: -0.04, flow: FLOW.noise(-0.04, 0.12, 0.0012, 2311), curve: 0.25, gap: 3.4, len: [30, 64], crossAngle: 0.5, crossAmt: 0.35, washAlpha: 0.5 });
@@ -5656,6 +5661,7 @@ function* buildJonesSky(g, rng) {
 function* buildJonesSea(g, rng) {
   const box = { x0: -170, y0: 1500, x1: 1250, y1: 2420 }, moonX = 660;
   const swell = (x, y) => 0.14 * Math.sin(x * 0.009 + y * 0.018) + 0.06 * Math.sin(x * 0.023 - y * 0.011 + 2);
+  g.fillStyle = '#0c101b'; g.beginPath(); g.moveTo(box.x0, box.y1); for (let x = box.x0; x <= box.x1; x += 10) g.lineTo(x, 1538 + 8 * Math.sin(x * 0.03)); g.lineTo(box.x1, box.y1); g.closePath(); g.fill();
   yield* pencilG(g, rng, box, (x, y) => y > 1536 + 8 * Math.sin(x * 0.03), (x, y) => clamp(0.2 + 0.1 * (0.5 + 0.5 * Math.sin(x * 0.009 + y * 0.018 + 1.4)) + 0.34 * Math.exp(-Math.abs(x - moonX) / (70 + (y - 1540) * 0.25)) * (0.5 + 0.5 * Math.sin(y * 0.14)) - 0.08 * smooth(clamp((y - 1900) / 500))),
     ['#06080f', '#0b0f1a', '#111828', '#19233a', '#2a3854', '#62728f'], { flow: swell, curve: 0.35, gap: 3.2, len: [24, 50], crossOff: 1.3, crossAmt: 0.3, washAlpha: 0.45 });
   for (let k = 0; k < 46; k++) {
@@ -6100,6 +6106,223 @@ SCORE.swamp = (K, { B, b, s, dur, mel }) => {
   strH(T.go, s.end - T.go + 0.3, ['D3', 'A3', 'F4'], 0.18);
   mel([[14, 'D5', 1], [15, 'C5', 1], [16, 'A4', 2], [18, 'G4', 1], [19, 'A4', 3]], 0.22);
   ['A5', 'D6'].forEach((n, k) => glock(B(21) + k * 0.4, n, 0.14, 2.5));
+};
+
+/* ==================== scene 25 — the siege of Yorktown, 1781 ================== */
+// Night in the allied siege lines. Washington touches off the first American gun; a French
+// mortar crew works beside it; shells arc across the sky like comets onto the burning town,
+// and a ship in the river beyond catches fire.
+const SIE_LIGHT = { tint: '#2c2440', amt: 0.36, dark: 0.14, ink: '#0c0a14', dir: [0.6, -0.8] };
+const SIE = (() => {
+  const s0 = sceneById.siege.start, B = beatOf('siege');
+  const T = { first: s0 + 4.0, glass: s0 + 8.2, charon: s0 + 13.2 };
+  const ground = 1600, mortar = { x: 300, y: ground, ang: -0.9 };
+  const mouth = [mortar.x + 30 + Math.cos(mortar.ang) * 78, mortar.y - 48 + Math.sin(mortar.ang) * 78];
+  const r = mulberry32(2501), shells = [];
+  const mortarFires = [1.6, 6.6, 11.2, 15.6, 19.7].map(x => s0 + x);
+  for (const t of mortarFires) shells.push({ t, a: mouth, b: [780 + r() * 260, 1156 + r() * 24], dur: 3.3 + r() * 0.5, h: 1000 + r() * 160, big: true });
+  // Shells from batteries off to the left, arriving all night.
+  for (let t = s0 - 3; t < s0 + 21.5; t += 0.6 + r() * 1.0) shells.push({ t, a: [-140, 1230 + r() * 80], b: [660 + r() * 440, 1140 + r() * 36], dur: 2.6 + r() * 1.4, h: 420 + r() * 520 });
+  shells.push({ t: T.charon - 2.8, a: [-140, 1260], b: [930, 1150], dur: 2.8, h: 640, hot: true });
+  const answers = []; for (let t = s0 + 0.8; t < s0 + 21.6; t += 0.8 + r() * 1.5) answers.push({ t, x: 600 + r() * 480, y: 1196 + r() * 22 });
+  return { s0, B, T, ground, mortar, mouth, shells, mortarFires, answers, gun: { x: 700, y: ground - 8, s: 1.6 } };
+})();
+const shellAt = (sh, t) => { const u = (t - sh.t) / sh.dur; return [lerp(sh.a[0], sh.b[0], u), lerp(sh.a[1], sh.b[1], u) - sh.h * 4 * u * (1 - u)]; };
+function* buildSiegeSky(g, rng) {
+  const box = { x0: -80, y0: 280, x1: 1160, y1: 1440 }, hz = 1160, L = SIE_LIGHT;
+  // Underlay, so no paper glints between the strokes.
+  const gs = g.createLinearGradient(0, box.y0, 0, hz); gs.addColorStop(0, '#0e1020'); gs.addColorStop(0.55, '#18182c'); gs.addColorStop(1, '#3a2432');
+  g.fillStyle = gs; g.fillRect(box.x0, box.y0, box.x1 - box.x0, hz + 4 - box.y0);
+  const gr0 = g.createRadialGradient(860, hz, 0, 860, hz, 560); gr0.addColorStop(0, 'rgba(120,56,40,0.75)'); gr0.addColorStop(1, 'rgba(60,30,40,0)');
+  g.fillStyle = gr0; g.fillRect(box.x0, box.y0, box.x1 - box.x0, hz + 4 - box.y0);
+  g.fillStyle = '#17131a'; g.fillRect(box.x0, hz, box.x1 - box.x0, box.y1 - hz);
+  // A night sky lit red from below by the burning town; strokes lean up to the right.
+  yield* pencilG(g, rng, { ...box, y1: hz + 4 }, () => true, (x, y) => clamp(0.1 + 0.6 * smooth(clamp((y - 560) / 600)) * (0.4 + 0.6 * smooth(clamp((x - 200) / 700))) + 0.05 * fbm(x * 0.002, y * 0.004, 2511)),
+    ['#0c0e1a', '#121426', '#1a1a30', '#261f38', '#3a2640', '#56303c', '#7a3e34', '#9c5230'], { angle: -0.45, flow: FLOW.noise(-0.45, 0.16, 0.0012, 2511), curve: 0.2, gap: 3.4, len: [30, 60], crossAngle: 0.9, crossAmt: 0.22, washAlpha: 0.55 });
+  // Smoke palls over the town, lit from beneath.
+  const pall = (x, y) => fbm(x * 0.003, y * 0.008, 2512) + 0.25 * smooth(clamp((x - 520) / 400)) - 0.1 - Math.abs(y - 960) / 260;
+  yield* pencilG(g, rng, { x0: box.x0, y0: 700, x1: box.x1, y1: hz }, (x, y) => pall(x, y) > 0, (x, y) => clamp(0.3 + 0.4 * (y - 700) / 460 + 0.2 * pall(x, y)), ['#1c1622', '#2e2230', '#48303a', '#6c3e3a', '#8e5038'],
+    { flow: FLOW.around(820, 1400, 0.5), curve: 0.5, gap: 3.2, len: [20, 44], cross: false, washAlpha: 0.35 });
+  for (let k = 0; k < 90; k++) { const x = box.x0 + rng() * (box.x1 - box.x0), y = box.y0 + rng() * 360; if (x > 500 && y > 500) continue; g.fillStyle = `rgba(230,226,236,${0.3 + 0.5 * rng()})`; const r = 0.8 + rng() * 1.2; g.fillRect(x - r, y - r / 3, 2 * r, r / 1.5); g.fillRect(x - r / 3, y - r, r / 1.5, 2 * r); }
+  yield;
+  // The horizon: the bay on the left with the French fleet riding at anchor, the river on the right.
+  g.fillStyle = '#2a3048'; g.fillRect(box.x0, hz - 12, 560, 14);
+  for (let k = 0; k < 9; k++) {
+    const x = box.x0 + 30 + k * 62 + rng() * 20, y = hz - 8, s = 0.7 + rng() * 0.4;
+    g.fillStyle = '#0e0e18'; g.beginPath(); g.moveTo(x - 20 * s, y); g.lineTo(x + 20 * s, y); g.lineTo(x + 16 * s, y + 5 * s); g.lineTo(x - 16 * s, y + 5 * s); g.closePath(); g.fill();
+    g.strokeStyle = '#0e0e18'; g.lineWidth = 1.4; g.beginPath(); for (const m of [-10, 0, 10]) { g.moveTo(x + m * s, y); g.lineTo(x + m * s, y - (28 + (m === 0 ? 8 : 0)) * s); } g.stroke();
+    g.fillStyle = '#ffd98a'; g.fillRect(x - 12 * s, y - 2, 2, 2); if (rng() < 0.5) g.fillRect(x + 8 * s, y - 2, 2, 2);
+  }
+  g.fillStyle = '#3a2a2c'; g.fillRect(560, hz - 10, 620, 12);
+  // Yorktown on its bluff: roofs, chimneys, a steeple, windows lit.
+  const bluff = x => hz - 26 - 10 * Math.sin(x * 0.01);
+  yield* pencilG(g, rng, { x0: 540, y0: hz - 60, x1: box.x1, y1: hz + 60 }, (x, y) => y > bluff(x) && x > 560, () => 0.3, ['#120e14', '#1a141a', '#241a1e'], { angle: -1.2, wander: 0.3, curve: 0.2, gap: 2.6, len: [8, 16], cross: false, wash: false });
+  for (let x = 600; x < 1150; x += 36 + rng() * 40) {
+    const w = 26 + rng() * 34, h = 26 + rng() * 40, b = bluff(x) + 4, P = [[x - w / 2, b], [x - w / 2, b - h], [x, b - h - 16 - rng() * 10], [x + w / 2, b - h], [x + w / 2, b]];
+    g.fillStyle = '#100c12'; g.beginPath(); polyPath(g, P); g.fill();
+    g.fillStyle = '#100c12'; g.fillRect(x + w * 0.2, b - h - 22, 6, 14);
+    for (let k = 0; k < 3; k++) if (rng() < 0.55) { g.fillStyle = rng() < 0.5 ? '#ffb85a' : '#e8904a'; g.fillRect(x - w / 2 + 5 + rng() * (w - 12), b - h + 6 + rng() * (h - 14), 4, 5); }
+  }
+  g.fillStyle = '#100c12'; g.beginPath(); g.moveTo(760, bluff(760) - 40); g.lineTo(766, bluff(760) - 96); g.lineTo(772, bluff(760) - 40); g.closePath(); g.fill(); g.fillRect(754, bluff(760) - 44, 24, 48);
+  // The British works in front of the town, and the dark plain scarred with trenches and craters.
+  yield* pencilG(g, rng, { x0: box.x0, y0: hz, x1: box.x1, y1: box.y1 }, (x, y) => y > hz + 2, (x, y) => clamp(0.2 + 0.2 * (y - hz) / 280 + 0.05 * fbm(x * 0.01, y * 0.03, 2513)), ['#0e0c10', '#141018', '#1a151c', '#221c22', '#2c2428'].map(c => lit(c, L)),
+    { angle: 0.03, flow: FLOW.noise(0.03, 0.1, 0.004, 2513), curve: 0.15, gap: 2.8, len: [24, 50], crossAngle: -0.5, crossAmt: 0.3 });
+  g.strokeStyle = '#3e2e2a'; g.lineWidth = 5; g.beginPath(); g.moveTo(520, hz + 36); for (let x = 520; x < 1160; x += 40) g.lineTo(x + 20, hz + 30 + (x / 40 % 2 ? 6 : -4)); g.stroke();
+  g.strokeStyle = '#2a2024'; g.lineWidth = 7; g.beginPath(); let px = -60, py = 1380; g.moveTo(px, py); for (let k = 0; k < 9; k++) { px += 70 + rng() * 40; py += (k % 2 ? -1 : 1) * (22 + rng() * 14) - 14; g.lineTo(px, py); } g.stroke();
+  for (let k = 0; k < 24; k++) { const x = box.x0 + rng() * (box.x1 - box.x0), y = hz + 30 + rng() * 240, w = 10 + (y - hz) * 0.12; g.fillStyle = 'rgba(8,6,8,0.6)'; g.beginPath(); g.ellipse(x, y, w, w * 0.3, 0, 0, TAU); g.fill(); }
+}
+function* buildSiegeWorks(g, rng) {
+  const L = SIE_LIGHT, box = { x0: -80, y0: 1260, x1: 1160, y1: 2140 };
+  const top = x => 1420 + 14 * Math.sin(x * 0.013) + (x > 830 && x < 950 ? 70 * Math.sin(Math.PI * (x - 830) / 120) : 0);
+  g.fillStyle = lit('#2a1e16', L); g.beginPath(); g.moveTo(box.x0, 1545); for (let x = box.x0; x <= box.x1; x += 10) g.lineTo(x, top(x) + 3); g.lineTo(box.x1, 1545); g.closePath(); g.fill();
+  g.fillStyle = lit('#20160e', L); g.fillRect(box.x0, 1528, box.x1 - box.x0, box.y1 - 1528);
+  // The parapet: packed earth in layered bands, trodden and raw.
+  yield* pencilG(g, rng, { x0: box.x0, y0: 1340, x1: box.x1, y1: 1560 }, (x, y) => y > top(x) && y < 1540, (x, y) => clamp(0.25 + 0.3 * (y - top(x)) / 120 + 0.1 * Math.sin(y * 0.15 + fbm(x * 0.01, y * 0.01, 2521) * 4)), ['#1c1410', '#2a1e16', '#3a2a1e', '#4e3a28', '#624a32'].map(c => lit(c, L)),
+    { angle: 0.04, flow: FLOW.wobble(() => 0.04, 0.15, 0.01, 2521), curve: 0.2, gap: 2.8, len: [20, 44], crossAngle: 0.7, crossAmt: 0.35 });
+  sketchLine(g, Array.from({ length: 64 }, (_, k) => { const x = box.x0 + k * (box.x1 - box.x0) / 63; return [x, top(x)]; }), rng, 1, L.ink, 2.2, 0.8);
+  // Gabions along the crest: wicker baskets of earth, the weave going round them.
+  for (let x = box.x0 + 20; x < box.x1; x += 46) {
+    if (x > 800 && x < 980) continue;
+    const b = top(x) + 6, w = 21, h = 56, P = [[x - w, b], [x - w, b - h], [x + w, b - h], [x + w, b]];
+    g.fillStyle = lit('#3e3020', L); g.beginPath(); polyPath(g, P); g.fill();
+    g.strokeStyle = lit('#6a5434', L); g.lineWidth = 2; g.beginPath();
+    for (let y = b - h + 5; y < b; y += 6) { g.moveTo(x - w, y); for (let k = 1; k <= 6; k++) g.lineTo(x - w + k * w / 3, y + ((k % 2) ? -2 : 2)); }
+    g.stroke();
+    g.strokeStyle = lit('#2a2014', L); g.lineWidth = 2.4; g.beginPath(); for (let k = -2; k <= 2; k++) { g.moveTo(x + k * w / 2.5, b - h - 4); g.lineTo(x + k * w / 2.5, b); } g.stroke();
+    g.fillStyle = lit('#2a1e14', L); g.beginPath(); g.ellipse(x, b - h, w, 6, 0, Math.PI, TAU); g.fill();
+    sketchLine(g, P, rng, 0.6, L.ink, 1.6, 0.8);
+  }
+  // Fascines lining the embrasure.
+  for (const [x0, x1] of [[790, 836], [944, 990]]) for (let k = 0; k < 4; k++) sketchLine(g, [[x0, top(x0) + 8 + k * 11], [x1, top(x1) + 8 + k * 11]], rng, 1, lit('#5e4a30', L), 8, 0.9);
+  // The battery floor: planked platforms, beaten earth, a pyramid of shells, powder kegs.
+  yield* pencilG(g, rng, { x0: box.x0, y0: 1520, x1: box.x1, y1: box.y1 }, (x, y) => y > 1530, (x, y) => clamp(0.34 + 0.08 * fbm(x * 0.006, y * 0.01, 2522) - 0.16 * smooth(clamp((y - 1700) / 400))), ['#140e0c', '#1c140e', '#261a12', '#302218', '#3c2c1e'].map(c => lit(c, L)),
+    { angle: -0.08, flow: FLOW.noise(-0.08, 0.35, 0.002, 2522), curve: 0.25, gap: 3, len: [26, 54], crossAngle: 0.5, crossAmt: 0.3 });
+  for (const [x0, x1, y0] of [[520, 1060, 1600], [140, 470, 1606]]) for (let y = y0; y < y0 + 40; y += 10) sketchLine(g, [[x0 + (y - y0) * 0.3, y], [x1 + (y - y0) * 0.4, y + 2]], rng, 0.8, lit('#5a4430', L), 9, 0.85);
+  for (let row = 0; row < 4; row++) for (let k = 0; k < 4 - row; k++) { const x = 90 + k * 26 + row * 13, y = 1590 - row * 22; g.fillStyle = lit('#141416', L); g.beginPath(); g.arc(x, y, 12, 0, TAU); g.fill(); g.fillStyle = lit('#3a3a40', L); g.beginPath(); g.arc(x - 4, y - 4, 4, 0, TAU); g.fill(); }
+  for (const x of [1010, 1050]) { g.fillStyle = lit('#4a3420', L); g.fillRect(x - 16, 1570, 32, 40); g.strokeStyle = lit('#1a1614', L); g.lineWidth = 3; g.beginPath(); for (const y of [1578, 1600]) { g.moveTo(x - 16, y); g.lineTo(x + 16, y); } g.stroke(); }
+  // The hot-shot furnace at the left, brick, its mouth glowing.
+  const F = [[-80, 1620], [-80, 1470], [40, 1470], [60, 1500], [60, 1620]];
+  yield* pencilG(g, rng, bboxOf(F, 2), (x, y) => inPoly(F, x, y), () => 0.4, ['#3a1e16', '#522a1c', '#6a3622'].map(c => lit(c, L)), { angle: 0, gap: 3, len: [10, 18], crossAngle: 1.57, crossAmt: 0.5 });
+  for (let y = 1484; y < 1620; y += 14) sketchLine(g, [[-80, y], [60, y]], rng, 0.5, lit('#1e120e', L), 1.2, 0.6);
+  g.fillStyle = '#e8702a'; g.fillRect(0, 1560, 44, 30); g.fillStyle = '#ffc060'; g.fillRect(8, 1568, 28, 16);
+}
+const SIE_LAYERS = {
+  sky: new BoilLayer({ name: 'siegeSky', box: { x0: -80, y0: 280, x1: 1160, y1: 1440 }, res: 0.6, seed: 2530, build: buildSiegeSky }),
+  works: new BoilLayer({ name: 'siegeWorks', box: { x0: -80, y0: 1260, x1: 1160, y1: 2140 }, res: 0.72, seed: 2531, build: buildSiegeWorks }),
+};
+const SIE_GUN = makeGun('siegeGun', 2532, { light: SIE_LIGHT, metal: 'iron', res: 1 });
+function drawMortar(g, x, y, ang, kick, L, tick) {
+  const rng = mulberry32(hash3(tick, 2533));
+  const bed = [[x - 60, y], [x - 54, y - 44], [x + 70, y - 44], [x + 76, y]];
+  g.fillStyle = lit('#3e2a1a', L); g.beginPath(); polyPath(g, bed); g.fill(); sketchLine(g, bed.concat([bed[0]]), rng, 0.6, L.ink, 2, 0.9);
+  g.strokeStyle = lit('#1c1410', L); g.lineWidth = 3; g.beginPath(); g.moveTo(x - 50, y - 22); g.lineTo(x + 66, y - 22); g.stroke();
+  g.save(); g.translate(x + 30 - kick * 6, y - 48 + kick * 4); g.rotate(ang);
+  const tube = [[-30, -30], [70, -26], [80, -32], [86, 32], [72, 26], [-30, 30], [-44, 0]];
+  g.fillStyle = lit('#8a6a2e', L); g.beginPath(); polyPath(g, tube); g.fill();
+  g.fillStyle = lit('#c8a456', L); g.fillRect(-20, -22, 90, 8);
+  g.strokeStyle = L.ink; g.lineWidth = 2; for (const bx of [10, 50]) { g.beginPath(); g.moveTo(bx, -29); g.lineTo(bx, 29); g.stroke(); }
+  sketchLine(g, tube.concat([tube[0]]), rng, 0.6, L.ink, 2.2, 0.95);
+  g.fillStyle = '#0a0808'; g.beginPath(); g.ellipse(84, 0, 6, 26, 0, 0, TAU); g.fill();
+  g.restore();
+  g.fillStyle = lit('#5a4a30', L); g.beginPath(); g.arc(x + 30, y - 48, 12, 0, TAU); g.fill();
+}
+function drawSiege(g, t, lt, tick) {
+  const S = SIE, T = S.T, L = SIE_LIGHT;
+  SIE_LAYERS.sky.draw(g, tick);
+  // Fires in the town, growing; the ship in the river goes up in flames.
+  const tf = [[640, 1128, 0], [720, 1122, 3], [880, 1130, 6.5], [1010, 1126, 10], [800, 1134, 14]].filter(f => lt > f[2]);
+  drawFlames(g, tf.flatMap(([x, y, d], i) => [0, 1, 2].map(k => [x - 14 + k * 14, y, 6 + 5 * smooth(clamp((lt - d) / 3)) * (1 + k % 2), 70 + i * 3 + k])), t, { k: 1, glowA: 0.35, sparks: 8, seed: 2534 });
+  const ch = t - T.charon;
+  {
+    const x = 960, y = 1150, burn = smooth(clamp(ch / 2));
+    g.fillStyle = '#0c0a0e'; g.beginPath(); g.moveTo(x - 60, y - 2); g.lineTo(x + 60, y - 2); g.lineTo(x + 50, y + 10); g.lineTo(x - 50, y + 10); g.closePath(); g.fill();
+    g.strokeStyle = '#0c0a0e'; g.lineWidth = 2.4; g.beginPath(); for (const m of [-30, 0, 30]) { g.moveTo(x + m, y); g.lineTo(x + m, y - 70 - (m ? 0 : 14)); } g.moveTo(x - 44, y - 44); g.lineTo(x + 44, y - 44); g.stroke();
+    if (ch > 0) {
+      drawFlames(g, Array.from({ length: 9 }, (_, k) => [x - 48 + k * 12, y - 2 - (k % 3) * 18 * burn, 8 + 12 * burn * (0.6 + 0.4 * rand3(k, 1, 4)), 90 + k]), t, { k: 1 + 0.5 * burn, glowA: 0.4, sparks: 16, seed: 2535 });
+      g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,140,60,${0.22 * burn})`; for (let k = 0; k < 8; k++) g.fillRect(x - 40 + 10 * Math.sin(lt * 3 + k), y + 14 + k * 5, 80 - k * 6, 2.5); g.restore();
+    }
+  }
+  // The British answer from their works.
+  for (const a of S.answers) { const age = t - a.t; if (age < 0 || age > 0.25) continue; const k = 1 - age / 0.25; g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(a.x, a.y, 0, a.x, a.y, 40); gr.addColorStop(0, `rgba(255,220,150,${0.9 * k})`); gr.addColorStop(1, 'rgba(255,140,60,0)'); g.fillStyle = gr; g.fillRect(a.x - 40, a.y - 40, 80, 80); g.restore(); }
+  // Shells in flight, trailing their burning fuses; bursts over the town.
+  g.save(); g.globalCompositeOperation = 'lighter'; g.lineCap = 'round';
+  for (const sh of S.shells) {
+    const age = t - sh.t, u = age / sh.dur;
+    if (u > 0 && u < 1) {
+      for (let k = 0; k < 26; k++) { const t0 = t - k * 0.04, t1 = t - (k + 1) * 0.04; if (t1 < sh.t) break; const p0 = shellAt(sh, t0), p1 = shellAt(sh, t1); g.strokeStyle = `rgba(255,${200 - k * 5},${110 - k * 3},${0.75 * (1 - k / 26)})`; g.lineWidth = (sh.big ? 4 : 2.8) * (1 - k / 30); g.beginPath(); g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); g.stroke(); }
+      const p = shellAt(sh, t); g.fillStyle = sh.hot ? '#ff8040' : '#ffe0a0'; g.beginPath(); g.arc(p[0], p[1], sh.big ? 4.5 : 3.2, 0, TAU); g.fill();
+    } else if (u >= 1 && age - sh.dur < 0.5) {
+      const b = age - sh.dur, k = 1 - b / 0.5, R = (sh.big ? 70 : 44) * (0.6 + 0.8 * (1 - k));
+      const gr = g.createRadialGradient(sh.b[0], sh.b[1] - 10, 0, sh.b[0], sh.b[1] - 10, R); gr.addColorStop(0, `rgba(255,230,170,${0.9 * k})`); gr.addColorStop(0.4, `rgba(255,150,60,${0.5 * k})`); gr.addColorStop(1, 'rgba(255,90,30,0)');
+      g.fillStyle = gr; g.fillRect(sh.b[0] - R, sh.b[1] - 10 - R, 2 * R, 2 * R);
+    }
+  }
+  g.restore();
+  for (const sh of S.shells) { const b = t - sh.t - sh.dur; if (b > 0 && b < 4) drawSmoke(g, PUFFS, tick, sh.b[0], sh.b[1] - 16, b, { dir: 1, wind: 10, seed: 2536 + (sh.t * 10 | 0), n: 2, size: sh.big ? 0.7 : 0.45, life: 4, rise: 10, alpha: 0.2 }); }
+  SIE_LAYERS.works.draw(g, tick);
+  // Furnace glow.
+  { const gl = 0.3 + 0.08 * vnoise(t * 5, 2537); g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(22, 1576, 0, 22, 1576, 260); gr.addColorStop(0, `rgba(255,140,50,${gl})`); gr.addColorStop(1, 'rgba(255,100,30,0)'); g.fillStyle = gr; g.fillRect(-240, 1316, 520, 520); g.restore(); }
+  // Washington, behind the breech: he touches off the first gun, then watches through a glass.
+  const G = S.gun, reach = pulse(t, T.first, 0.8, 0.9), glass = smooth(invLerp(T.glass, T.glass + 0.8, t));
+  {
+    const P = basePose(); P.lean = 0.04 + 0.18 * reach; P.nh = lerp2([22, -118], [42, -104], reach); P.ne = [-1, 0.6];
+    if (glass > 0) { P.nh = lerp2([22, -118], [26, -170], glass); P.fh = lerp2(P.fh, [22, -166], glass); P.ne = P.fe = [-1, 0.3]; P.head = -0.1 * glass; }
+    drawFigure(g, { x: 560, y: G.y - 18, s: 1.62, dir: 1, outfit: 'washington', seed: 2538, light: L }, P, tick);
+    const h = [560 + P.nh[0] * 1.62, G.y - 18 + P.nh[1] * 1.62], vent = [G.x - 20 * G.s, G.y - 84 * G.s];
+    if (glass <= 0) { const tip = lerp2([h[0] + 34, h[1] - 110], [vent[0], vent[1] - 3], reach); drawLinstock(g, lerp2([h[0] - 12, h[1] + 60], [h[0] - (tip[0] - h[0]) * 0.45, h[1] - (tip[1] - h[1]) * 0.45], reach), tip, t, L); }
+    else { const e = [h[0] + 36, h[1] - 6]; g.strokeStyle = lit('#2a2420', L); g.lineWidth = 8; g.lineCap = 'round'; g.beginPath(); g.moveTo(h[0] - 8, h[1] + 2); g.lineTo(e[0], e[1]); g.stroke(); g.strokeStyle = lit('#c9a55a', L); g.lineWidth = 3; g.beginPath(); g.moveTo(e[0] - 4, e[1] - 4); g.lineTo(e[0] - 4, e[1] + 4); g.stroke(); }
+  }
+  let rec = 0; { const a = t - T.first; if (a > 0) rec = 70 * Math.exp(-a * 2.4) * smooth(clamp(a / 0.05)); }
+  const mz = drawGun(g, SIE_GUN, tick, G.x, G.y, G.s, 1, rec);
+  drawSmoke(g, PUFFS, tick, mz[0] + 60, mz[1], t - T.first, { dir: 1, wind: 30, seed: 2539, n: 7, size: 1.4, life: 6, rise: 12, alpha: 0.18 }); drawFlash(g, mz[0] + 16, mz[1], t - T.first, 1, 2);
+  // The loader stands clear by the muzzle with his rammer.
+  { const P = basePose(); P.nh = [24, -118]; P.ne = [-1, 0.5]; P.head = -0.2 * pulse(t, T.first, 0.1, 0.8); const f = drawFigure(g, { x: 900, y: G.y + 30, s: 1.66, dir: -1, outfit: 'continental', seed: 2540, light: L }, P, tick); g.strokeStyle = lit('#6a4a2a', L); g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.moveTo(f.hand[0] + 2, G.y + 26); g.lineTo(f.hand[0] - 8, G.y + 26 - 380); g.stroke(); g.fillStyle = lit('#5e5448', L); g.beginPath(); g.ellipse(f.hand[0] - 8, G.y - 360, 10, 17, 0, 0, TAU); g.fill(); }
+  // The French mortar crew: one carries up the next shell, one fires.
+  const M = S.mortar; let kick = 0; for (const f of S.mortarFires) { const a = t - f; if (a > 0) kick = Math.max(kick, Math.exp(-a * 4) * smooth(clamp(a / 0.04))); }
+  {
+    const next = S.mortarFires.find(f => f > t) ?? Infinity, prev = [...S.mortarFires].reverse().find(f => f <= t) ?? -Infinity;
+    const r2 = pulse(t, next, 0.7, 0.1) + pulse(t, prev, 0.01, 0.7), P = basePose(); P.lean = 0.05 + 0.2 * r2; P.nh = lerp2([22, -118], [44, -100], r2); P.ne = [-1, 0.6];
+    drawFigure(g, { x: 170, y: M.y - 14, s: 1.56, dir: 1, outfit: 'french', seed: 2541, light: L }, P, tick);
+    const h = [170 + P.nh[0] * 1.56, M.y - 14 + P.nh[1] * 1.56], fuse = [M.x + 4, M.y - 76], tip = lerp2([h[0] + 30, h[1] - 110], fuse, r2);
+    drawLinstock(g, lerp2([h[0] - 12, h[1] + 60], [h[0] - (tip[0] - h[0]) * 0.45, h[1] - (tip[1] - h[1]) * 0.45], r2), tip, t, L);
+  }
+  drawMortar(g, M.x, M.y, M.ang, kick, L, tick);
+  for (const f of S.mortarFires) { drawSmoke(g, PUFFS, tick, S.mouth[0] + 20, S.mouth[1] - 30, t - f, { dir: 1, wind: 14, seed: 2542 + (f * 10 | 0), n: 6, size: 1.1, life: 5, rise: 60, alpha: 0.15 }); const age = t - f; if (age > 0 && age < 0.12) { g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(S.mouth[0], S.mouth[1], 0, S.mouth[0], S.mouth[1], 160); gr.addColorStop(0, `rgba(255,236,180,${1 - age / 0.12})`); gr.addColorStop(1, 'rgba(255,130,50,0)'); g.fillStyle = gr; g.fillRect(S.mouth[0] - 160, S.mouth[1] - 160, 320, 320); g.restore(); } }
+  {
+    const cyc = frac((lt + 1.2) / 4.6), w = cyc < 0.5 ? smooth(cyc / 0.5) : 1 - smooth((cyc - 0.5) / 0.5), x = lerp(120, 420, w);
+    const P = walkPose(Math.abs(x - 120) / 1.5, 110); P.nh = [30, -96]; P.fh = [22, -98]; P.ne = P.fe = [-1, 0.6]; P.lean = 0.12;
+    const f = drawFigure(g, { x, y: M.y + 26, s: 1.6, dir: cyc < 0.5 ? 1 : -1, outfit: 'french', seed: 2543, light: L }, P, tick);
+    if (cyc < 0.5) { const h = lerp2(f.hand, f.farHand, 0.5); g.fillStyle = lit('#141416', L); g.beginPath(); g.arc(h[0] + 4, h[1] + 12, 17, 0, TAU); g.fill(); g.fillStyle = lit('#44444a', L); g.beginPath(); g.arc(h[0] - 2, h[1] + 6, 5, 0, TAU); g.fill(); }
+  }
+  // The flashes light the whole battery.
+  let fl = 0.3 * Math.exp(-Math.max(0, t - T.first) * 5) * (t > T.first ? 1 : 0);
+  for (const f of S.mortarFires) if (t > f) fl = Math.max(fl, 0.24 * Math.exp(-(t - f) * 5));
+  if (fl > 0.004) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,170,90,${fl})`; g.fillRect(0, 0, 1080, 1920); g.restore(); }
+}
+function camSiege(lt, t) {
+  const T = SIE.T; let amp = 0; if (t > T.first) amp += 20 * Math.exp(-(t - T.first) * 5); for (const f of SIE.mortarFires) if (t > f) amp += 8 * Math.exp(-(t - f) * 6);
+  const keys = [[0, 1.66, 330, 1440], [2.4, 1.68, 340, 1440], [3.7, 1.7, 690, 1430], [8.4, 1.74, 700, 1430], [12, 1.3, 620, 1330], [21.5, 1.14, 600, 1180], [22, 1.14, 600, 1180]];
+  let i = 0; while (i < keys.length - 2 && lt > keys[i + 1][0]) i++;
+  const [t0, z0, x0, y0] = keys[i], [t1, z1, x1, y1] = keys[i + 1], w = smooth(clamp((lt - t0) / (t1 - t0)));
+  return { z: lerp(z0, z1, w), x: lerp(x0, x1, w) + amp * vnoise(t * 27, 9), y: lerp(y0, y1, w) + amp * vnoise(t * 29, 10), rot: 0 };
+}
+SCN.siege = { layers: [SIE_LAYERS.sky, SIE_LAYERS.works, SIE_GUN.body, SIE_GUN.wheel, ...PUFFS], draw: drawSiege, cam: camSiege };
+// A dogged march in G minor, the shells whistling over; Washington's gun lands on the
+// downbeat; the drums build; it ends poised on D, waiting for the surrender.
+SCORE.siege = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, glock, pz, sn, flam, roll, bd, str, strH, brass } = K, S = SIE, T = S.T;
+  hold(s.start, dur, (time, into) => N.windOn(time, into, dur));
+  hold(s.start, dur, (time, into) => N.fireOn(time, into, dur, 0.18, 2));
+  for (const sh of S.shells) { if (sh.t + sh.dur < s.start || sh.t + sh.dur > s.end - 0.2) continue; if (sh.t > s.start) one(sh.t + 0.2, time => N.whoosh(time, sh.big ? 0.22 : 0.1)); one(sh.t + sh.dur, time => N.bd(time, sh.big ? 0.4 : 0.22, sh.big ? 'C2' : 'F2')); }
+  for (const f of S.mortarFires) { one(f, time => N.volley(time, 2, 0.03, 0.9)); bd(f, 0.8, 'G1'); }
+  for (const a of S.answers) one(a.t + 0.9, time => N.bd(time, 0.18, 'A1'));
+  one(T.first, time => { N.volley(time, 3, 0.04, 1); N.thunk(time); }); bd(T.first, 1, 'D1');
+  hold(s.start, T.first - s.start, (time, into) => N.droneOn(['G2', 'D3'], time, into, T.first - s.start, 0.34));
+  for (let bb = 0; bb < 32; bb++) { if (bb % 2 === 0) bd(B(bb), 0.3, 'G2'); sn(B(bb + 0.5), bb > 6 ? 0.22 : 0.12); if (bb % 4 === 0 && bb > 6) flam(B(bb), 0.35); pz(B(bb), ['G2', 'D2', 'Bb2', 'D2'][bb % 4], 0.45, 0.3); }
+  strH(T.first, B(16) - T.first, ['G2', 'D3', 'Bb3'], 0.3); strH(B(16), B(24) - B(16), ['Eb3', 'G3', 'C4'], 0.3); strH(B(24), s.end - B(24) + 0.3, ['D3', 'F#3', 'A3', 'C4'], 0.34);
+  mel([[6, 'G4', 1], [7, 'Bb4', 1], [8, 'D5', 1.5], [9.5, 'C5', 0.5], [10, 'Bb4', 1], [11, 'A4', 1], [12, 'G4', 2], [14, 'D5', 1], [15, 'Eb5', 1], [16, 'F5', 1.5], [17.5, 'Eb5', 0.5], [18, 'D5', 1], [19, 'C5', 1], [20, 'Bb4', 2], [22, 'A4', 1], [23, 'Bb4', 1], [24, 'C5', 1.5], [25.5, 'Bb4', 0.5], [26, 'A4', 2], [28, 'F#4', 2], [30, 'D5', 2]], 0.5);
+  for (const [bb, n, d] of [[12, 'G3', 2], [20, 'Bb3', 2], [28, 'D4', 4]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.5);
+  roll(B(28), s.end - 0.05, 0.12, 0.6, 0.045);
 };
 
 /* ===================== scene 6 — surrender at Yorktown, 1781 =============== */
