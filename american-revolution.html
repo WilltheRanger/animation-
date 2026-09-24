@@ -1509,6 +1509,7 @@ function drawRider(g, att, F, o = {}, tick) {
 // A field gun in profile facing +x, ground at y = 0: carriage and barrel in one sprite,
 // the spoked wheel in another so it turns as the gun recoils.
 const GUN_WHEEL_R = 46;
+const GUN_BARREL = [[-40, -72], [-34, -84], [0, -83], [120, -76], [150, -78], [160, -80], [162, -64], [150, -65], [120, -62], [0, -55], [-34, -54]];
 function* buildGunBody(g, rng, o) {
   const L = o.light || LIGHTS.day, wood = ['#3a2616', '#553820', '#70492a', '#8a5c36'].map(c => lit(c, L));
   const metal = (o.metal === 'iron' ? ['#1c1d1f', '#2c2e31', '#3f4246', '#5a5e63', '#7c8086'] : ['#4a3514', '#6e4f1e', '#8f6a2a', '#b08a3e', '#cfae62']).map(c => lit(c, L));
@@ -1516,7 +1517,7 @@ function* buildGunBody(g, rng, o) {
   yield* pencilG(g, rng, bboxOf(trail, 2), (x, y) => inPoly(trail, x, y), (x, y) => clamp(0.55 - (y + 30) / 90 + 0.12 * vnoise2(x * 0.05, y * 0.2, 3)), wood, { flow: () => -0.36, curve: 0.1, gap: 2.4, len: [10, 22], cross: false });
   sketchLine(g, trail.concat([trail[0]]), rng, 0.8, L.ink, 2, 0.9);
   // Barrel: breech ring, a taper to the muzzle swell.
-  const bar = [[-40, -72], [-34, -84], [0, -83], [120, -76], [150, -78], [160, -80], [162, -64], [150, -65], [120, -62], [0, -55], [-34, -54]];
+  const bar = GUN_BARREL;
   yield* pencilG(g, rng, bboxOf(bar, 2), (x, y) => inPoly(bar, x, y), (x, y) => clamp(0.3 + 0.6 * Math.exp(-(((y + 76) / 7) ** 2)) + 0.1 * vnoise2(x * 0.05, y * 0.3, 4)), metal, { angle: 0.035, wander: 0.04, curve: 0.05, gap: 2.2, len: [12, 26], crossAmt: 0.5 });
   g.strokeStyle = L.ink; g.lineWidth = 2; g.beginPath();
   for (const x of [-26, 30, 112, 150]) { g.moveTo(x, -85 + (x + 40) * 0.07); g.lineTo(x, -53 - (x + 40) * 0.055); }
@@ -5314,6 +5315,278 @@ SCORE.france = (K, { B, b, s, dur, mel }) => {
   for (const [bb, n, d] of [[27, ['G4', 'D5'], 0.5], [27.5, ['G4', 'D5'], 0.5], [28, ['B4', 'G5'], 1], [29, ['D5', 'B5'], 1], [30, ['C5', 'A5'], 1], [31, ['D5', 'B5'], 2]]) brass(B(bb), d * b * 0.95, n, 0.56);
   strH(B(27), s.end - B(27) + 0.3, ['G2', 'D3', 'B3', 'G4'], 0.38);
   ['G5', 'B5', 'D6', 'G6'].forEach((n, k) => glock(B(31) + k * 0.12, n, 0.3, 1.5));
+};
+
+/* ========================== scene 22 — Monmouth, 1778 ========================= */
+// A blazing June day. A woman brings water up to a gun crew. Her husband sponges out the gun
+// after it fires, walks back and drops in the heat; she takes up his rammer, loads, and the
+// gun fires again.
+const MON = (() => {
+  const s0 = sceneById.monmouth.start, B = beatOf('monmouth'), T = { shot: cue('monmouth', 'shot'), takes: cue('monmouth', 'takes') };
+  T.fire1 = s0 + 2.4; T.ram = T.takes + 2.0; T.fire2 = T.takes + 5.8;
+  const gunX = 520, gunY = 1560, gs = 1.5;
+  return { s0, B, T, gunX, gunY, gs, muzzle: [gunX + 163 * gs, gunY - 72 * gs], vent: [gunX - 20 * gs, gunY - 84 * gs], rodLen: 400 };
+})();
+const MON_LIGHT = { tint: '#f8dca0', amt: 0.1, dark: 0, ink: '#2a180c', dir: [-0.6, -0.8] };
+function* buildMonmouth(g, rng) {
+  const hz = 1180, L = MON_LIGHT, sun = [900, 950], box = { x0: 220, y0: 760, x1: 1060, y1: 2080 };
+  // A white-hot sky, the strokes raying out from the sun.
+  yield* pencilG(g, rng, { x0: box.x0, y0: box.y0, x1: box.x1, y1: hz + 6 }, (x, y) => Math.hypot(x - sun[0], y - sun[1]) > 56, (x, y) => clamp(0.3 + 0.45 * (y - box.y0) / (hz - box.y0) + 0.45 * Math.exp(-(Math.hypot(x - sun[0], y - sun[1]) - 56) / 190) + 0.1 * fbm(x * 0.004, y * 0.01, 211)), ['#a9aca0', '#bdbba8', '#cfc8ae', '#e0d6b8', '#ede2c4', '#f7eed6'],
+    { flow: FLOW.mix(FLOW.noise(0.12, 0.35, 0.003, 211), FLOW.radial(sun[0], sun[1]), (x, y) => 0.85 * Math.exp(-Math.hypot(x - sun[0], y - sun[1]) / 330)), curve: 0.3, gap: 3.6, len: [20, 42], crossOff: 0.5, crossAmt: 0.3, washAlpha: 0.42 });
+  yield* pencilG(g, rng, { x0: sun[0] - 60, y0: sun[1] - 60, x1: sun[0] + 60, y1: sun[1] + 60 }, (x, y) => Math.hypot(x - sun[0], y - sun[1]) < 58, () => 0.9, ['#f6e2a0', '#fbeebc', '#fff8dc'], { flow: FLOW.around(sun[0], sun[1]), curve: 0.6, gap: 3, len: [8, 14], cross: false });
+  // Far fields, hedgerows, and the two armies small in the haze.
+  const far = x => hz - 26 - 16 * Math.sin(x * 0.006);
+  yield* pencilG(g, rng, { x0: box.x0, y0: 1100, x1: box.x1, y1: 1300 }, (x, y) => y > far(x), (x, y) => clamp(0.55 + 0.2 * (y - far(x)) / 120), ['#7a8456', '#949c68', '#b0b27e', '#c8c496'], { flow: FLOW.along(far), curve: 0.2, gap: 3.4, len: [16, 30], cross: false });
+  yield* scribbleG(g, rng, { x0: box.x0, y0: 1100, x1: box.x1, y1: 1200 }, (x, y) => y > far(x) - 34 && y < far(x) + 6 && fbm(x * 0.01, 3, 212) > -0.1, () => 0.35, ['#3e5028', '#546834', '#6e8244'], { cell: 9, step: 4, loops: 7, width: 1.5, alpha: 0.8 });
+  const hedge = x => 1262 + 10 * Math.sin(x * 0.011 + 1);
+  yield* scribbleG(g, rng, { x0: box.x0, y0: 1210, x1: box.x1, y1: 1280 }, (x, y) => y > hedge(x) - 26 - 10 * fbm(x * 0.02, 1, 215) && y < hedge(x), () => 0.4, ['#34461f', '#4a5e2a', '#627638', '#7a8a48'], { cell: 11, step: 4.5, loops: 8, width: 1.7, alpha: 0.85 });
+  const tiny = (x, y, coat, h) => {
+    const haze = c => mix(c, '#d8cfb4', 0.38);
+    g.lineCap = 'round';
+    g.strokeStyle = haze('#3e342a'); g.lineWidth = 1.7; g.beginPath(); g.moveTo(x - 1.5, y - h * 0.34); g.lineTo(x - 2.5, y); g.moveTo(x + 1.5, y - h * 0.34); g.lineTo(x + 2, y); g.moveTo(x + 3.5, y - h * 0.66); g.lineTo(x + 5.5, y - h * 1.22); g.stroke();
+    g.strokeStyle = haze(coat); g.lineWidth = 4; g.beginPath(); g.moveTo(x, y - h * 0.7); g.lineTo(x, y - h * 0.32); g.stroke();
+    g.fillStyle = haze('#d9a27e'); g.fillRect(x - 1.6, y - h * 0.84, 3.2, 3.2);
+    g.fillStyle = haze('#221e1a'); g.fillRect(x - 3.4, y - h * 0.92, 6.8, 2.4);
+  };
+  for (let k = 0; k < 17; k++) tiny(180 + k * 15 + rng() * 4, 1226 + rng() * 3, '#2e4676', 22);
+  for (let k = 0; k < 14; k++) tiny(730 + k * 14 + rng() * 4, 1218 + rng() * 3, '#b3342b', 20);
+  // Parched ground: long stubble strokes in the distance, trampled swirls near the gun.
+  yield* pencilG(g, rng, { x0: box.x0, y0: 1180, x1: box.x1, y1: box.y1 }, (x, y) => y > far(x) + 2 && !(y > hedge(x) - 30 && y < hedge(x) - 2 && fbm(x * 0.02, 1, 215) > -0.2), (x, y) => clamp(0.66 + 0.14 * fbm(x * 0.006, y * 0.01, 213) - 0.24 * smooth(clamp((y - 1560) / 480))), ['#7a6238', '#957a48', '#b0955c', '#c8ae74', '#dcc690', '#ecdcae'].map(c => lit(c, L)),
+    { flow: FLOW.mix(FLOW.noise(-0.04, 0.2, 0.006, 213), FLOW.noise(0.4, 1.4, 0.005, 214), (x, y) => smooth(clamp((y - 1480) / 200)) * 0.8), curve: 0.3, gap: 3.6, len: [14, 30], crossAngle: -1.2, crossAmt: 0.42 });
+  yield* stippleG(g, rng, { x0: box.x0, y0: 1560, x1: box.x1, y1: box.y1 }, () => true, (x, y) => clamp(0.3 + 0.4 * fbm(x * 0.01, y * 0.01, 216)), ['#6a5230', '#8a7048', '#e8d8b0'], { density: 0.004, size: 2 });
+  // Wheel ruts where the gun was hauled up, and a sponge bucket by the trail.
+  for (const dy of [0, 26]) sketchLine(g, Array.from({ length: 12 }, (_, k) => [470 - k * 32, 1566 + dy - k * k * 0.5]), rng, 1.2, lit('#5a4228', L), 5, 0.55);
+  const bk = [[848, 1556], [884, 1556], [879, 1604], [853, 1604]];
+  g.fillStyle = lit('#6e4a2a', L); g.beginPath(); polyPath(g, bk); g.fill();
+  g.strokeStyle = lit('#2e2a26', L); g.lineWidth = 3; g.beginPath(); for (const y of [1567, 1593]) { g.moveTo(849, y); g.lineTo(883, y); } g.stroke();
+  sketchLine(g, bk.concat([bk[0]]), rng, 0.6, L.ink, 2, 0.9);
+  g.fillStyle = lit('#3a4a58', L); g.beginPath(); g.ellipse(866, 1557, 17, 4, 0, 0, TAU); g.fill();
+  // Dry tufts: a few blades fanning out from each root, every tuft leaning its own way.
+  for (let k = 0; k < 70; k++) {
+    const x = box.x0 + rng() * (box.x1 - box.x0), y = 1590 + rng() * 480, n = 3 + (rng() * 4 | 0), lean = (rng() - 0.5) * 1.2, h = 10 + (y - 1590) * 0.03 + rng() * 10;
+    g.strokeStyle = mix('#5a4630', '#a88a58', rng() * 0.6); g.lineWidth = 1.6 + rng(); g.beginPath();
+    for (let j = 0; j < n; j++) { const a = -Math.PI / 2 + lean + (j - (n - 1) / 2) * 0.28 + (rng() - 0.5) * 0.2, l = h * (0.7 + 0.5 * rng()); g.moveTo(x + j * 2, y); g.quadraticCurveTo(x + j * 2 + Math.cos(a) * l * 0.5, y + Math.sin(a) * l * 0.5 - 2, x + j * 2 + Math.cos(a + lean * 0.4) * l, y + Math.sin(a + lean * 0.4) * l); }
+    g.stroke();
+  }
+}
+const MON_LAYER = new BoilLayer({ name: 'monmouth', box: { x0: 220, y0: 760, x1: 1060, y1: 2080 }, res: 0.86, seed: 3001, build: buildMonmouth });
+const MON_GUN = makeGun('monGun', 3002, { light: MON_LIGHT, metal: 'bronze', res: 1 });
+// A rammer staff as a grip point, a heading and the lengths either side of the grip.
+const monAng = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+const rodEnds = R => { const c = Math.cos(R.ang), s = Math.sin(R.ang); return [[R.c[0] - c * R.back, R.c[1] - s * R.back], [R.c[0] + c * R.front, R.c[1] + s * R.front]]; };
+const rodMix = (A, B, w) => w <= 0 ? A : w >= 1 ? B : { c: lerp2(A.c, B.c, w), ang: A.ang + monAng(B.ang, A.ang) * w, back: lerp(A.back, B.back, w), front: lerp(A.front, B.front, w) };
+function drawRod(g, a, b, L, tick) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l, rng = mulberry32(hash3(tick, a[0] | 0, 57));
+  const A2 = [a[0] + ux * 12, a[1] + uy * 12], B2 = [b[0] - ux * 10, b[1] - uy * 10];
+  g.lineCap = 'round';
+  g.strokeStyle = L.ink; g.lineWidth = 10; g.beginPath(); g.moveTo(A2[0], A2[1]); g.lineTo(B2[0], B2[1]); g.stroke();
+  g.strokeStyle = lit('#8a6038', L); g.lineWidth = 6.5; g.stroke();
+  sketchLine(g, [[A2[0] - uy * 1.6, A2[1] + ux * 1.6], [B2[0] - uy * 1.6, B2[1] + ux * 1.6]], rng, 0.7, lit('#c89868', L), 1.6, 0.8);
+  // The rammer head at b, the fleece sponge at a.
+  g.save(); g.translate(b[0], b[1]); g.rotate(Math.atan2(uy, ux));
+  g.fillStyle = lit('#4a3018', L); g.fillRect(-18, -8, 22, 16); g.strokeStyle = L.ink; g.lineWidth = 2; g.strokeRect(-18, -8, 22, 16);
+  g.restore();
+  g.save(); g.translate(a[0], a[1]); g.rotate(Math.atan2(uy, ux));
+  g.fillStyle = lit('#5e5448', L); g.beginPath(); g.ellipse(6, 0, 17, 10, 0, 0, TAU); g.fill();
+  g.strokeStyle = lit('#3a332c', L); g.lineWidth = 1.4; g.beginPath(); for (let k = 0; k < 7; k++) { const x = -8 + rng() * 26, y = (rng() - 0.5) * 14; g.moveTo(x, y); g.arc(x, y, 2 + rng() * 2, 0, Math.PI * 1.4); } g.stroke();
+  g.restore();
+}
+function drawLinstock(g, a, b, t, L) {
+  g.lineCap = 'round';
+  g.strokeStyle = L.ink; g.lineWidth = 7; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+  g.strokeStyle = lit('#6a4a2a', L); g.lineWidth = 4; g.stroke();
+  const gl = 0.65 + 0.35 * Math.sin(t * 13) * Math.sin(t * 7.3);
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const R = g.createRadialGradient(b[0], b[1], 0, b[0], b[1], 20); R.addColorStop(0, `rgba(255,170,60,${0.75 * gl})`); R.addColorStop(1, 'rgba(255,120,40,0)');
+  g.fillStyle = R; g.beginPath(); g.arc(b[0], b[1], 20, 0, TAU); g.fill(); g.restore();
+  g.fillStyle = '#ff9a3a'; g.beginPath(); g.arc(b[0], b[1], 3.6, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(110,104,96,0.45)'; g.lineWidth = 2; g.beginPath(); g.moveTo(b[0], b[1] - 4);
+  for (let k = 1; k <= 8; k++) g.lineTo(b[0] + Math.sin(t * 2 + k * 0.9) * k * 1.5 + k * 1.6, b[1] - 4 - k * 9);
+  g.stroke();
+}
+function drawPitcher(g, x, y, ang, L) {
+  // (x, y) is the top of the handle; ang tips it over.
+  g.save(); g.translate(x, y); g.rotate(ang);
+  const body = [[-14, 2], [14, 2], [20, 40], [15, 46], [-15, 46], [-20, 40]];
+  g.fillStyle = lit('#9a6a3e', L); g.beginPath(); polyPath(g, body); g.fill();
+  g.fillStyle = lit('#c89868', L); g.fillRect(-10, 8, 5, 30);
+  g.strokeStyle = L.ink; g.lineWidth = 2; g.beginPath(); polyPath(g, body); g.closePath(); g.stroke();
+  g.beginPath(); g.moveTo(-14, 2); g.lineTo(-22, -6); g.stroke();
+  g.beginPath(); g.arc(20, 18, 11, -1.3, 1.3); g.stroke();
+  g.restore();
+}
+const MON_RAM = { husband: 1660, molly: 1650 };
+// Rammer drill: hands on the staff at muzzle height, pushing (k = 1) and drawing back.
+function ramPose(k, hy) {
+  const P = basePose(); P.hip = [6 * k, -94]; P.lean = 0.2 + 0.25 * k;
+  P.nf = [22, -FIG.ankle]; P.ff = [-26, -FIG.ankle];
+  P.nh = [40 + 26 * k, -hy]; P.fh = [14 + 26 * k, -hy - 0.5]; P.ne = [-0.3, 1]; P.fe = [-0.3, 1];
+  return P;
+}
+function drawMonmouth(g, t, lt, tick) {
+  const M = MON, T = M.T, L = MON_LIGHT, u = t - M.s0, rl = M.rodLen;
+  MON_LAYER.draw(g, tick);
+  for (let k = 0; k < 5; k++) drawSmoke(g, PUFFS, tick, 260 + k * 190, 1176, (lt * 0.4 + k * 1.3) % 6 + 0.3, { dir: 1, wind: 12, rise: 14, seed: 210 + k, n: 4, size: 0.6, life: 6, alpha: 0.5 });
+  const hy = y => (y - M.muzzle[1]);
+  const inMuzzle = (x, s, k) => ({ c: [x - (40 + 26 * k) * s, M.muzzle[1]], ang: Math.PI, back: 110, front: 290 });
+  const upright = (h, dir, rest, y) => rest ? { c: h, ang: -Math.PI / 2 + 0.03 * dir, back: y - 2 - h[1], front: rl - (y - 2 - h[1]) } : { c: h, ang: -Math.PI / 2 + 0.03 * dir, back: 120, front: rl - 120 };
+
+  /* ---- the husband: waits by the wheel, sponges out the gun, walks back and drops ---- */
+  const hs = 1.9, hyF = MON_RAM.husband, hk = hy(hyF) / hs;
+  let hx, hdir, HP, hRod = null, hClip = false;
+  const hHand = P => [hx + hdir * P.nh[0] * hs, hyF + P.nh[1] * hs];
+  if (u < 2.9) { hx = 680; hdir = 1; HP = basePose(); HP.nh = [26, -118]; HP.ne = [-1, 0.5]; HP.head = -0.12 * pulse(t, T.fire1, 0.08, 0.7); hRod = upright(hHand(HP), 1, true, hyF); }
+  else if (u < 4.0) {
+    hx = lerp(680, 920, smooth(invLerp(2.9, 4.0, u))); hdir = 1; HP = walkPose((hx - 680) / hs); HP.nh = [26, -118]; HP.ne = [-1, 0.5];
+    hRod = rodMix(upright(hHand(HP), 1, true, hyF), upright(hHand(HP), 1, false), smooth(invLerp(2.9, 3.15, u)));
+  } else if (u < 5.0) {
+    hx = 920; hdir = -1; hClip = true; const k = Math.max(pulse(t, M.s0 + 4.45, 0.3, 0.2), pulse(t, M.s0 + 4.85, 0.18, 0.15));
+    const w = smooth(invLerp(4.0, 4.35, u)), P0 = basePose(); P0.nh = [26, -118]; P0.ne = [-1, 0.5];
+    HP = mixPose(P0, ramPose(k, hk), w);
+    hRod = rodMix(upright(hHand(P0), -1, false), inMuzzle(hx, hs, k), w);
+  } else if (u < 6.0) {
+    const w = smooth(invLerp(5.0, 6.0, u)); hx = lerp(920, 640, w); hdir = -1; hClip = u < 5.35;
+    const Pw = walkPose((920 - hx) / hs); Pw.nh = [26, -118]; Pw.ne = [-1, 0.5];
+    const b = smooth(invLerp(5.0, 5.3, u)); HP = mixPose(ramPose(0, hk), Pw, b);
+    hRod = rodMix(inMuzzle(920, hs, 0), upright(hHand(Pw), -1, false), b);
+  } else if (u < 6.35) {
+    // He staggers; the staff slips from his hand.
+    hx = 640; hdir = -1; const st = smooth(invLerp(6.0, 6.3, u)), let_ = smooth(invLerp(6.08, 6.3, u));
+    HP = basePose(); HP.nh = lerp2([26, -118], [34, -150], let_); HP.fh = lerp2(HP.fh, [-20, -140], st); HP.ne = [-1, 0.5]; HP.fe = [-1, -0.2]; HP.lean = -0.16 * st; HP.head = -0.35 * st;
+    if (u < 6.08) hRod = upright(hHand(HP), -1, false);
+  } else {
+    // ...turns, and slides down with his back against the wheel.
+    hdir = 1; const down = smooth(invLerp(6.35, 7.3, u)); hx = lerp(640, 590, down);
+    const P0 = basePose(); P0.nh = [-30, -140]; P0.fh = [30, -150]; P0.ne = [-1, -0.2]; P0.fe = [-1, 0.5]; P0.lean = -0.16; P0.head = -0.35;
+    const sp = seatPose({ lean: -0.3, head: 0.42 + 0.06 * Math.sin(t * 1.7) }); sp.hip = [0, -22]; sp.nf = [66, -7]; sp.ff = [58, -7]; sp.nh = [34, -28]; sp.fh = [22, -30]; sp.ne = sp.fe = [-1, 0.3];
+    HP = mixPose(P0, sp, down);
+  }
+  // The dropped staff topples away from the gun and lies in the grass.
+  const lyA = [700, hyF + 12], lyAng = -0.02, lyB = [lyA[0] + Math.cos(lyAng) * rl, lyA[1] + Math.sin(lyAng) * rl];
+
+  /* ---- Molly ---- */
+  const ms = 1.86, myF = MON_RAM.molly, mk = hy(myF) / ms;
+  let mx, mdir = 1, MP, mRod = null, mClip = false, pitcher = null;
+  const mHand = P => [mx + mdir * P.nh[0] * ms, myF + P.nh[1] * ms];
+  const carryP = () => { const P = basePose(); P.nh = [30, -84]; P.fh = [2, -86]; P.ne = P.fe = [-0.6, 1]; return P; };
+  const carry = P => ({ c: mHand(P), ang: -Math.PI + 0.02, back: 310, front: 90 });
+  const ramK = Math.max(...[0, 1, 2].map(i => pulse(t, T.ram + i * 0.98, 0.35, 0.45)));
+  if (u < 3.4) { mx = lerp(150, 380, smooth(invLerp(1.0, 3.4, u))); MP = walkPose((mx - 150) / ms, 100); MP.nh = [8, -60]; MP.ne = [-1, 0.2]; MP.head -= 0.25 * pulse(t, T.fire1, 0.08, 0.7); pitcher = 'hand'; }
+  else if (u < 6.7) {
+    // Waiting with the water; at the fall she drops the pitcher, hands to her chest.
+    mx = 380; MP = basePose(); MP.nh = [10, -60]; MP.ne = [-1, 0.2];
+    const st = smooth(invLerp(6.0, 6.25, u)) * (1 - smooth(invLerp(6.5, 6.7, u)));
+    MP.lean = 0.02 - 0.14 * st; MP.head = -0.1 * st;
+    if (u > 6.1) { MP.nh = lerp2([10, -60], [22, -146], st); MP.fh = lerp2(MP.fh, [18, -150], st); MP.ne = MP.fe = [-1, 0.8]; }
+    pitcher = u < 6.12 ? 'hand' : 'drop';
+  } else if (u < 7.6) { mx = lerp(380, 760, invLerp(6.7, 7.6, u)); MP = runPose((mx - 380) / ms, 180); pitcher = 'drop'; }
+  else if (u < 8.8) {
+    // She stoops for the staff and comes up with it.
+    mx = 760; pitcher = 'drop';
+    const bend = smooth(invLerp(7.6, 8.2, u)) * (1 - smooth(invLerp(8.4, 8.8, u)));
+    const Pb = basePose(); Pb.hip = [0, -50]; Pb.lean = 1.15; Pb.nf = [30, -7]; Pb.ff = [-18, -7]; Pb.nh = [52, -12]; Pb.fh = [40, -14]; Pb.ne = Pb.fe = [-0.2, 1]; Pb.head = -0.3;
+    MP = u < 8.4 ? mixPose(basePose(), Pb, bend) : mixPose(carryP(), Pb, bend);
+    if (u >= 8.2) {
+      const gx = mx + 52 * ms, f = (gx - lyA[0]) / rl, g0 = [gx, lerp(lyA[1], lyB[1], f)];
+      const R0 = { c: g0, ang: Math.PI + lyAng, back: rl * (1 - f), front: rl * f };
+      mRod = rodMix(R0, carry(carryP()), smooth(invLerp(8.4, 8.8, u)));
+    }
+  } else if (u < 9.4) {
+    mx = lerp(760, 920, smooth(invLerp(8.8, 9.4, u))); MP = walkPose((mx - 760) / ms, 100); const C = carryP(); MP.nh = C.nh; MP.fh = C.fh; MP.ne = C.ne; MP.fe = C.fe;
+    mRod = carry(MP); pitcher = 'drop';
+  } else if (u < 12.8) {
+    // She turns, slides the rammer into the muzzle and drives the charge home.
+    mx = 920; mdir = -1; pitcher = 'drop'; mClip = true;
+    const w = smooth(invLerp(9.4, 9.65, u)), C = carryP(), P0 = ramPose(0, mk);
+    MP = mixPose(C, ramPose(ramK, mk), w);
+    // Up to the muzzle's mouth, then the staff slides in through her hands.
+    const hc = [mx - P0.nh[0] * ms, M.muzzle[1]], mouth = { c: hc, ang: Math.PI, front: hc[0] - M.muzzle[0] - 6, back: rl - (hc[0] - M.muzzle[0] - 6) };
+    mRod = u < 9.65 ? rodMix(carry(C), mouth, w) : rodMix(mouth, inMuzzle(mx, ms, ramK), smooth(invLerp(9.65, 10.0, u)));
+  } else {
+    mdir = -1; pitcher = 'drop'; mClip = u < 13.1;
+    const w = smooth(invLerp(12.8, 13.6, u)); mx = lerp(920, 800, w);
+    const Pw = walkPose((920 - mx) / ms, 100), up = smooth(invLerp(14.8, 15.4, u));
+    Pw.nh = lerp2([26, -112], [16, -196], up); Pw.ne = [-1, 0.5 - up];
+    if (up > 0) { Pw.fh = lerp2(Pw.fh, [30, -150], up); Pw.fe = [-1, 0.4]; Pw.head = -0.25 * up; }
+    const fl = pulse(t, T.fire2, 0.08, 0.9); Pw.lean -= 0.12 * fl; Pw.head -= 0.3 * fl;
+    const b = smooth(invLerp(12.6, 13.0, u)); MP = mixPose(ramPose(0, mk), Pw, b);
+    const Ru = { c: mHand(Pw), ang: -Math.PI / 2 - 0.03 + 0.12 * up, back: lerp(120, 170, up), front: lerp(280, 230, up) };
+    mRod = rodMix(inMuzzle(920, ms, 0), Ru, b);
+  }
+
+  /* ---- the gunner, behind the breech with his linstock ---- */
+  const reach = Math.max(pulse(t, T.fire1, 0.7, 0.8), pulse(t, T.fire2, 0.7, 0.8));
+  const GP = basePose(); GP.lean = 0.05 + 0.2 * reach; GP.nh = lerp2([24, -120], [44, -108], reach); GP.ne = [-1, 0.6]; GP.head = 0.12 * reach - 0.1 * pulse(t, T.shot + 0.3, 0.3, 1.5);
+  drawFigure(g, { x: 400, y: 1552, s: 1.8, dir: 1, outfit: 'continental', seed: 227, light: L }, GP, tick);
+  const gh = [400 + GP.nh[0] * 1.8, 1552 + GP.nh[1] * 1.8];
+  const tip = lerp2([gh[0] + 30, gh[1] - 120], [M.vent[0], M.vent[1] - 3], reach);
+  drawLinstock(g, lerp2([gh[0] - 14, gh[1] + 60], [gh[0] - (tip[0] - gh[0]) * 0.45, gh[1] - (tip[1] - gh[1]) * 0.45], reach), tip, t, L);
+
+  /* ---- the gun ---- */
+  let rec = 0;
+  for (const f of [T.fire1, T.fire2]) { const a = t - f; if (a > 0) rec = Math.max(rec, 60 * Math.exp(-a * 2.5) * smooth(clamp(a / 0.05))); }
+  const mz = drawGun(g, MON_GUN, tick, M.gunX, M.gunY, M.gs, 1, rec);
+  for (const [f, sd] of [[T.fire1, 221], [T.fire2, 222]]) { drawSmoke(g, PUFFS, tick, mz[0] + 70, mz[1], t - f, { dir: 1, wind: 44, seed: sd, n: 7, size: 1.4, life: 6, rise: 8, alpha: 0.9 }); drawFlash(g, mz[0] + 14, mz[1], t - f, 1, 1.8); }
+  // A staff in the bore is hidden by the barrel.
+  const ax = M.gunX - rec, bore = GUN_BARREL.map(([x, y]) => [ax + x * M.gs, M.gunY + y * M.gs]);
+  const rod = (R, clip) => {
+    const [a, b] = rodEnds(R);
+    if (!clip) { drawRod(g, b, a, L, tick); return; }
+    g.save(); g.beginPath(); g.rect(-4000, -4000, 9000, 9000); polyPath(g, bore); g.clip('evenodd'); drawRod(g, b, a, L, tick); g.restore();
+  };
+
+  /* ---- the dropped pitcher ---- */
+  if (pitcher === 'drop') {
+    const td = M.s0 + 6.12, f = smooth(invLerp(td, td + 0.32, t)), x0 = 380 + 10 * ms, y0 = myF - 60 * ms;
+    const p = [lerp(x0, x0 + 26, f), lerp(y0, myF - 16, f * f)];
+    if (f > 0.9) { g.fillStyle = 'rgba(70,52,30,0.28)'; g.beginPath(); g.ellipse(x0 + 70, myF + 2, 46 * smooth(invLerp(td + 0.3, td + 1.4, t)) + 4, 7, 0, 0, TAU); g.fill(); }
+    drawPitcher(g, p[0], p[1], 1.45 * f, L);
+    const sa = t - td - 0.3;
+    if (sa > 0 && sa < 0.6) { g.strokeStyle = `rgba(200,220,235,${0.8 * (1 - sa / 0.6)})`; g.lineWidth = 2.4; g.beginPath(); for (let k = 0; k < 9; k++) { const an = -0.3 - k * 0.3, r = 20 + 70 * sa * (0.6 + 0.4 * rand3(k, 5, 6)); const px = x0 + 50 + Math.cos(an) * r, py = myF - 10 + Math.sin(an) * r * 0.8 + 90 * sa * sa; g.moveTo(px, py); g.lineTo(px + 4, py + 5); } g.stroke(); }
+  }
+
+  /* ---- Molly, then her husband in front, then the staff in the grass ---- */
+  const mo = drawFigure(g, { x: mx, y: myF, s: ms, dir: mdir, outfit: 'molly', seed: 224, light: L }, MP, tick);
+  if (pitcher === 'hand') drawPitcher(g, mo.hand[0], mo.hand[1] - 4, 0, L);
+  if (mRod) rod(mRod, mClip);
+  drawFigure(g, { x: hx, y: hyF, s: hs, dir: hdir, outfit: 'continental', seed: 223, light: L }, HP, tick);
+  if (hRod) rod(hRod, hClip);
+  if (u >= 6.08 && u < 8.4) {
+    const f0 = smooth(invLerp(6.08, 6.2, u)), f = invLerp(6.2, 6.65, u);
+    const bounce = u > 6.65 ? -0.05 * Math.exp(-(u - 6.65) * 9) * Math.abs(Math.sin((u - 6.65) * 30)) : 0;
+    const x0 = 640 - 26 * hs, y0 = hyF - 118 * hs + 120;
+    const a = f <= 0 ? [x0, lerp(y0, lyA[1], f0 * f0)] : lerp2([x0, lyA[1]], lyA, smooth(f));
+    const an = -Math.PI / 2 - 0.03 + (Math.PI / 2 + 0.01) * f * f + bounce;
+    drawRod(g, [a[0] + Math.cos(an) * rl, a[1] + Math.sin(an) * rl], a, L, tick);
+  }
+  // Heat shimmer over the ground.
+  g.save(); g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.06 + 0.03 * Math.sin(lt * 3); g.fillStyle = '#fff4d0'; g.fillRect(220, 1110, 840, 190); g.restore();
+}
+function camMonmouth(lt, t) {
+  const T = MON.T; let amp = 0; for (const f of [T.fire1, T.fire2]) if (t > f) amp += 14 * Math.exp(-(t - f) * 6);
+  const u = smooth(clamp(lt / durOf('monmouth'))), pan = smooth(invLerp(2.4, 4.4, lt));
+  return { z: lerp(1.58, 1.66, u), x: lerp(600, 668, pan) + amp * vnoise(t * 30, 1), y: lerp(1400, 1410, u) + amp * vnoise(t * 27, 2), rot: amp * 0.0008 * vnoise(t * 20, 3) };
+}
+SCN.monmouth = { layers: [MON_LAYER, MON_GUN.body, MON_GUN.wheel, ...PUFFS], draw: drawMonmouth, cam: camMonmouth };
+// Heat: a shimmering drone and far guns; a sad turn as the gunner falls; then her tune,
+// bold and brisk, and the gun.
+SCORE.monmouth = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, glock, pz, sn, flam, roll, bd, str, strH, brass } = K, T = MON.T;
+  hold(s.start, T.takes - s.start, (time, into) => N.droneOn(['A2', 'E3'], time, into, T.takes - s.start, 0.34));
+  for (const tt of [0.6, 4.2, 7.8, 12.5, 15.4].map(x => s.start + x)) one(tt, time => N.bd(time, 0.3, 'C2'));
+  one(T.fire1, time => N.volley(time, 2, 0.04, 1)); bd(T.fire1, 1, 'G1');
+  mel([[4, 'E5', 1], [5, 'G5', 0.5], [5.5, 'F#5', 0.5], [6, 'E5', 1], [7, 'B4', 1], [8, 'C5', 1], [9, 'D5', 1]], 0.4);
+  one(T.shot + 0.12, time => N.clatter(time, 0.35)); one(T.shot + 0.44, time => N.splash(time, 0.3)); one(T.shot + 0.85, time => N.clatter(time, 0.55));
+  strH(T.shot, T.takes - T.shot, ['E3', 'G3', 'B3'], 0.3);
+  mel([[10, 'B4', 1.5], [11.5, 'A4', 0.5], [12, 'G4', 1], [13, 'F#4', 1]], 0.34);
+  roll(T.takes - 0.8, T.takes - 0.03, 0.05, 0.5, 0.04);
+  mel([[14, 'E5', 0.5], [14.5, 'E5', 0.5], [15, 'B5', 1], [16, 'G5', 0.5], [16.5, 'E5', 0.5], [17, 'F#5', 1], [18, 'G5', 0.5], [18.5, 'A5', 0.5], [19, 'B5', 1], [20, 'A5', 0.5], [20.5, 'G5', 0.5], [21, 'F#5', 1], [22, 'E5', 2]], 0.6);
+  for (let bb = 14; bb < 24; bb++) { flam(B(bb), 0.45); sn(B(bb + 0.5), 0.25); if (bb % 2 === 0) { bd(B(bb), 0.5); pz(B(bb), 'E2', 0.6, 0.3); } else pz(B(bb), 'B2', 0.5, 0.3); }
+  for (let k = 0; k < 3; k++) one(T.ram + k * 0.98, time => N.gavel(time, 0.7));
+  one(T.fire2, time => N.volley(time, 3, 0.05, 1)); bd(T.fire2, 1, 'G1');
+  for (const [bb, n, d] of [[24, 'E4', 1], [25, 'G4', 1], [26, 'B4', 1], [27, 'E5', 3]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.6);
+  strH(B(24), s.end - B(24) + 0.3, ['E3', 'B3', 'E4', 'G#4'], 0.42);
+  ['E6', 'G#6', 'B6'].forEach((n, k) => glock(B(27) + k * 0.14, n, 0.3, 1.5));
 };
 
 /* ===================== scene 6 — surrender at Yorktown, 1781 =============== */
