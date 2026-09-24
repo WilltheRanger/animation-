@@ -5589,6 +5589,247 @@ SCORE.monmouth = (K, { B, b, s, dur, mel }) => {
   ['E6', 'G#6', 'B6'].forEach((n, k) => glock(B(27) + k * 0.14, n, 0.3, 1.5));
 };
 
+/* ===================== scene 23 — John Paul Jones, 1779 ===================== */
+// Moonlight off Flamborough Head. The Bonhomme Richard and HMS Serapis lie lashed together.
+// A broadside sets the Richard's rigging alight; hailed to strike, Jones raises his sword;
+// a grenade dropped from the Richard's yard finds the Serapis's powder, and her ensign
+// comes down.
+const JON_LIGHT = { tint: '#3a2e3e', amt: 0.3, dark: 0.08, ink: '#100c14' };
+const SER_LIGHT = { tint: '#1e2848', amt: 0.44, dark: 0.16, ink: '#0a0c18' };
+Object.assign(OUTFITS, { pearson: { ...OUTFITS.jones, hair: '#dcd6ca', lace: '#e8d27a', skin: '#e2b391' } });
+const JON = (() => {
+  const s0 = sceneById.jones.start, B = beatOf('jones'), T = { broadside: cue('jones', 'broadside'), quote: cue('jones', 'quote') };
+  T.fire = T.broadside + 0.35; T.hail = s0 + 10.0; T.throw = s0 + 16.4; T.blast = s0 + 17.2; T.strike = s0 + 19.6;
+  const L = JON_LIGHT;
+  const ser = { x: 560, y: 1360, flip: 1, spec: { L: 900, H: 116, masts: [[-0.3, 0.95], [0.02, 1.1], [0.3, 0.96]], sails: 'set', ports: 13, rows: 2, band: '#c8a860', openPorts: true, billow: 1.2, light: SER_LIGHT, sailPal: ['#6a7288', '#8890a6', '#a8b0c2', '#c8cedc'] } };
+  const ric = { x: 470, y: 1560, flip: -1, spec: { L: 1100, H: 150, masts: [[-0.28, 0.85], [0.02, 1.05], [0.3, 0.9]], sails: 'furled', ports: 14, rows: 1, band: '#7a5a34', light: L, hull: ['#0c0a0a', '#171212', '#231c18', '#342a22', '#4a3c30'] } };
+  const sheer = (sp, x) => -sp.H - 10 * ((2 * x / sp.L) ** 2) - (x < -sp.L * 0.32 ? 16 : 0);
+  const at = (sh, lx, ly) => [sh.x + sh.flip * lx, sh.y + ly];                 // ship-local → world
+  const deck = (sh, wx) => sh.y + sheer(sh.spec, (wx - sh.x) * sh.flip);
+  // The Serapis's gunports on the side facing us, bow to stern.
+  const ports = [];
+  for (let r = 0; r < 2; r++) for (let k = 0; k < 13; k++) { const lx = lerp(-900 * 0.36, 900 * 0.38, (k + 0.5) / 13); ports.push({ p: at(ser, lx, sheer(ser.spec, lx) + 116 * (0.3 + r * 0.32)), r, k }); }
+  const broad = ports.map(q => ({ t: T.broadside + (12 - q.k) * 0.075 + q.r * 0.03, p: q.p }));
+  // Scattered gunfire through the night, from both ships.
+  const rr = mulberry32(2301), shots = [];
+  for (let t = s0 + 0.6; t < s0 + 23.2; t += 0.45 + rr() * 1.2) { if (Math.abs(t - T.broadside) < 1.3 || Math.abs(t - T.blast) < 0.7 || (t > T.strike && t < T.strike + 4.4)) continue; shots.push({ t, ser: rr() < 0.5, i: (rr() * 26) | 0, x: 140 + rr() * 780 }); }
+  // The Richard's masts in world space (she faces left).
+  const mast = i => { const [fx, hf] = ric.spec.masts[i], lx = fx * 1100, top = -150 - hf * 1100 * 0.62, dk = sheer(ric.spec, lx); return { x: ric.x - lx, top: ric.y + top, deck: ric.y + dk, yards: [0.18, 0.46, 0.72].map(f => ric.y + top + (dk - top) * f), half: [0.22, 0.3, 0.36].map(k => k * 1100 * hf * 0.8) }; };
+  // Rigging fires: clusters of flame that catch one after another.
+  const fr = mulberry32(2302), fires = [];
+  const mm = mast(1), mz = mast(0), mf = mast(2);
+  // Each cluster burns along a yard: [mast, yard, from, to (fractions of the yard), delay].
+  for (const [M2, k, a, b, d] of [[mm, 1, -0.7, 0.1, 0], [mf, 1, -0.2, 0.6, 0.9], [mm, 2, 0.1, 0.8, 1.5], [mz, 2, -0.6, 0.3, 2.6], [mz, 1, -0.3, 0.5, 4.2], [mf, 2, -0.5, 0.2, 5.4]]) {
+    const n = 6 + (fr() * 3 | 0);
+    for (let j = 0; j < n; j++) fires.push({ x: M2.x + M2.half[k] * lerp(a, b, (j + fr() * 0.8) / n), y: M2.yards[k] + 2 + fr() * 6, sz: 7 + fr() * fr() * 30, seed: fires.length * 7 + 3, at: T.fire + d + j * 0.12 + fr() * 0.3 });
+  }
+  const grenadier = { x: mm.x + 250, y: mm.yards[2] };
+  const hatch = at(ser, 120, sheer(ser.spec, 120));
+  return { s0, B, T, L, ser, ric, sheer, at, deck, ports, broad, shots, mast, fires, grenadier, hatch };
+})();
+const jonShipBox = sp => ({ x0: -sp.L / 2 - 12, y0: -sp.H - sp.L * 0.62 * Math.max(...sp.masts.map(m => m[1])) - 20, x1: sp.L / 2 + sp.L * 0.3, y1: 8 });
+function* buildJonesSky(g, rng) {
+  const box = { x0: -170, y0: -90, x1: 1250, y1: 1640 }, hz = 1180, moon = [660, 470];
+  const dm = (x, y) => Math.hypot(x - moon[0], (y - moon[1]) * 1.1);
+  // The night sky: long, nearly level strokes in close blues, lifting toward the moon.
+  yield* pencilG(g, rng, { ...box, y1: hz + 4 }, (x, y) => dm(x, y) > 62, (x, y) => clamp(0.22 + 0.22 * smooth(clamp((y - 100) / 1080)) + 0.07 * fbm(x * 0.0018, y * 0.004, 2311)),
+    ['#0a0e1a', '#0f1422', '#141a2c', '#1a2236', '#212a40'], { angle: -0.04, flow: FLOW.noise(-0.04, 0.12, 0.0012, 2311), curve: 0.25, gap: 3.4, len: [30, 64], crossAngle: 0.5, crossAmt: 0.35, washAlpha: 0.5 });
+  // The moon's halo: soft rings of lighter strokes.
+  yield* pencilG(g, rng, { x0: moon[0] - 420, y0: moon[1] - 380, x1: moon[0] + 420, y1: moon[1] + 380 }, (x, y) => dm(x, y) > 62 && dm(x, y) < 380, (x, y) => clamp(0.95 - dm(x, y) / 400 + 0.05 * fbm(x * 0.01, y * 0.01, 2316)), ['#1c2438', '#28324a', '#38445e', '#4e5a76', '#6e7a94', '#9aa4ba'],
+    { flow: FLOW.around(moon[0], moon[1], 1.1), curve: 0.7, gap: 3.6, len: [14, 30], cross: false, wash: false });
+  // Ragged cloud banks drifting across, lit along their tops.
+  const cloud = (x, y) => fbm(x * 0.002, y * 0.009, 2313) - 0.26 - 0.4 * Math.abs(y - 760) / 300;
+  yield* pencilG(g, rng, { x0: box.x0, y0: 420, x1: box.x1, y1: 1120 }, (x, y) => cloud(x, y) > 0 && dm(x, y) > 70, (x, y) => clamp(0.3 + 0.28 * (cloud(x, y - 16) < 0 ? 1 : 0) + 0.3 * Math.exp(-dm(x, y) / 260)), ['#151b2a', '#1b2334', '#232c42', '#303a52', '#434e68'],
+    { angle: -0.12, flow: FLOW.noise(-0.12, 0.1, 0.004, 2314), curve: 0.15, gap: 2.8, len: [26, 60], cross: false, washAlpha: 0.35 });
+  // The full moon: short upright strokes, darker seas.
+  yield* pencilG(g, rng, { x0: moon[0] - 64, y0: moon[1] - 64, x1: moon[0] + 64, y1: moon[1] + 64 }, (x, y) => Math.hypot(x - moon[0], y - moon[1]) < 62, (x, y) => clamp(0.82 - 0.35 * clamp(fbm(x * 0.03, y * 0.03, 2315) + 0.2) - 0.12 * (x - moon[0] + y - moon[1]) / 120), ['#b0b0b0', '#cccac4', '#e4e0d4', '#f6f2e4'], { angle: -1.45, wander: 0.2, curve: 0.2, gap: 2.4, len: [6, 12], cross: false, wash: false });
+  sketchLine(g, Array.from({ length: 33 }, (_, k) => [moon[0] + Math.cos(k / 32 * TAU) * 62, moon[1] + Math.sin(k / 32 * TAU) * 62]), rng, 0.8, '#d8d6cc', 1.6, 0.8);
+  for (let k = 0; k < 120; k++) { const x = box.x0 + rng() * (box.x1 - box.x0), y = box.y0 + rng() * 620; if (dm(x, y) < 300 || cloud(x, y) > -0.08) continue; g.fillStyle = `rgba(226,230,240,${0.3 + 0.5 * rng()})`; const r = 0.8 + rng() * 1.4; g.fillRect(x - r, y - r / 3, 2 * r, r / 1.5); g.fillRect(x - r / 3, y - r, r / 1.5, 2 * r); }
+  yield;
+  // The far sea: level strokes, the moon's path down the middle.
+  yield* pencilG(g, rng, { x0: box.x0, y0: hz, x1: box.x1, y1: box.y1 }, (x, y) => y >= hz, (x, y) => clamp(0.16 + 0.08 * (y - hz) / 400 + 0.5 * Math.exp(-Math.abs(x - moon[0]) / (40 + (y - hz) * 0.35)) * (0.5 + 0.5 * Math.sin(y * 0.5 + x * 0.03))), ['#070a12', '#0c111e', '#131a2c', '#1c263c', '#34425e', '#7c8aa6'], { angle: 0, flow: FLOW.noise(0, 0.05, 0.01, 2312), curve: 0.15, gap: 3, len: [20, 46], crossAngle: 0.12, crossAmt: 0.25 });
+  g.lineCap = 'round';
+  for (let k = 0; k < 120; k++) { const y = hz + 4 + Math.pow(rng(), 1.3) * 440, w = 5 + rng() * 20 * (1 + (y - hz) / 220), x = moon[0] + (rng() - 0.5) * (26 + (y - hz) * 0.5); g.strokeStyle = rng() < 0.5 ? '#dde0ea' : '#9aa6bc'; g.globalAlpha = 0.3 + 0.5 * rng(); g.lineWidth = 1.4 + rng() * 1.6; g.beginPath(); g.moveTo(x - w / 2, y); g.lineTo(x + w / 2, y + (rng() - 0.5) * 2); g.stroke(); }
+  g.globalAlpha = 1;
+  g.fillStyle = '#1c2438'; g.fillRect(box.x0, hz - 1, box.x1 - box.x0, 3);
+}
+function* buildJonesSea(g, rng) {
+  const box = { x0: -170, y0: 1500, x1: 1250, y1: 2420 }, moonX = 660;
+  const swell = (x, y) => 0.14 * Math.sin(x * 0.009 + y * 0.018) + 0.06 * Math.sin(x * 0.023 - y * 0.011 + 2);
+  yield* pencilG(g, rng, box, (x, y) => y > 1536 + 8 * Math.sin(x * 0.03), (x, y) => clamp(0.2 + 0.1 * (0.5 + 0.5 * Math.sin(x * 0.009 + y * 0.018 + 1.4)) + 0.34 * Math.exp(-Math.abs(x - moonX) / (70 + (y - 1540) * 0.25)) * (0.5 + 0.5 * Math.sin(y * 0.14)) - 0.08 * smooth(clamp((y - 1900) / 500))),
+    ['#06080f', '#0b0f1a', '#111828', '#19233a', '#2a3854', '#62728f'], { flow: swell, curve: 0.35, gap: 3.2, len: [24, 50], crossOff: 1.3, crossAmt: 0.3, washAlpha: 0.45 });
+  for (let k = 0; k < 46; k++) {
+    const x = box.x0 + rng() * (box.x1 - box.x0), y = 1570 + rng() * 800, w = 50 + rng() * 90 * (1 + (y - 1560) / 700), near = Math.exp(-Math.abs(x - moonX) / 240);
+    const pts = Array.from({ length: 9 }, (_, i) => { const u = i / 8; return [x - w / 2 + w * u, y - Math.sin(u * Math.PI) * (3 + w * 0.04)]; });
+    sketchLine(g, pts, rng, 1, mix('#34445e', '#b8c2d4', near), 1.4 + rng() * 1.4, 0.4 + 0.4 * near);
+  }
+}
+const JON_LAYERS = {
+  sky: new BoilLayer({ name: 'jonesSky', box: { x0: -170, y0: -90, x1: 1250, y1: 1640 }, res: 0.6, seed: 2320, build: buildJonesSky }),
+  sea: new BoilLayer({ name: 'jonesSea', box: { x0: -170, y0: 1500, x1: 1250, y1: 2420 }, res: 0.56, seed: 2321, build: buildJonesSea }),
+  ser: new BoilLayer({ name: 'serapis', box: jonShipBox(JON.ser.spec), res: 0.72, seed: 2322, build: function* (g, rng) { yield* buildShip(g, rng, JON.ser.spec); } }),
+  ric: new BoilLayer({ name: 'richard', box: jonShipBox(JON.ric.spec), res: 0.86, seed: 2323, build: function* (g, rng) { yield* buildShip(g, rng, JON.ric.spec); } }),
+};
+// A gun going off through an open port, seen head-on: a round bloom and a few short spikes.
+function portFlash(g, x, y, age, big = 1) {
+  if (age < 0 || age > 0.16) return;
+  const a = 1 - age / 0.16, R = (26 + 20 * big) * (0.8 + 0.4 * a);
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const gr = g.createRadialGradient(x, y, 0, x, y, R * 2.2);
+  gr.addColorStop(0, `rgba(255,236,180,${0.95 * a})`); gr.addColorStop(0.35, `rgba(255,160,60,${0.55 * a})`); gr.addColorStop(1, 'rgba(255,110,30,0)');
+  g.fillStyle = gr; g.fillRect(x - R * 2.2, y - R * 2.2, R * 4.4, R * 4.4);
+  g.strokeStyle = `rgba(255,220,140,${a})`; g.lineWidth = 2.6; g.beginPath();
+  for (let k = 0; k < 7; k++) { const an = k / 7 * TAU + age * 9, l = R * (0.7 + 0.6 * rand3(k, age * 90 | 0, 5)); g.moveTo(x, y); g.lineTo(x + Math.cos(an) * l, y + Math.sin(an) * l * 0.7); }
+  g.stroke(); g.restore();
+}
+function drawJones(g, t, lt, tick) {
+  const J = JON, T = J.T, L = J.L, heave = 5 * Math.sin(lt * 0.9), roll = 0.004 * Math.sin(lt * 0.75);
+  const shipT = sh => { g.translate(sh.x, sh.y + heave); g.rotate(roll); g.translate(-sh.x, -sh.y); };
+  const fireK = smooth(invLerp(T.fire, T.fire + 5, t));
+  JON_LAYERS.sky.draw(g, tick);
+  // Smoke banks drifting between the ships.
+  for (let k = 0; k < 5; k++) drawSmoke(g, PUFFS, tick, -120 + k * 300, 1120 + (k % 2) * 60, (lt * 0.3 + k * 1.9) % 8 + 0.6, { dir: 1, wind: 20, rise: 12, seed: 2330 + k, n: 4, size: 1.3, life: 8, alpha: 0.18 + 0.1 * fireK });
+
+  /* ---- HMS Serapis ---- */
+  g.save(); shipT(J.ser);
+  JON_LAYERS.ser.drawAt(g, tick, J.ser.x, J.ser.y, 1, 0, 1, 1);
+  // Her ensign at the stern staff; at the end Captain Pearson hauls it down himself.
+  const st = J.at(J.ser, -454, -148), down = smooth(invLerp(T.strike + 0.4, T.strike + 2.2, t));
+  drawPole(g, st[0], st[1] - 170, st[1] + 8, tick, L, 5);
+  drawFlag(g, FLAGS.red, tick, st[0], lerp(st[1] - 166, st[1] - 60, down), 176, 114, lt, { dir: 1, amp: lerp(9, 3, down), waves: 1.3, speed: 1.2, droop: 0.5 * down, ink: L.ink });
+  // Captain Pearson on his quarterdeck.
+  const PP = basePose(), hail = pulse(t, T.hail + 0.4, 0.4, 1.4), haul = t > T.strike ? smooth(invLerp(T.strike, T.strike + 0.3, t)) : 0;
+  if (hail > 0) { PP.nh = lerp2(PP.nh, [16, -146], hail); PP.ne = [-1, 0.2]; PP.head = -0.15 * hail; }
+  if (haul > 0) { const h = 0.5 + 0.5 * Math.sin((t - T.strike) * 7); PP.nh = lerp2(PP.nh, [-14, lerp(-190, -120, h * (1 - smooth(invLerp(T.strike + 2.2, T.strike + 2.6, t))))], haul); PP.fh = lerp2(PP.fh, [-10, -150], haul); PP.ne = PP.fe = [-1, 0.6]; PP.head = 0.2 * haul; PP.lean = 0.04; }
+  drawFigure(g, { x: 190, y: J.deck(J.ser, 190) + 4, s: 0.96, dir: haul > 0 ? -1 : 1, outfit: 'pearson', seed: 2342, light: L }, PP, tick);
+  // Her guns: scattered shots, then the full broadside rippling aft.
+  for (const q of J.broad) portFlash(g, q.p[0], q.p[1], t - q.t, 1);
+  for (const s of J.shots) if (s.ser) { const q = J.ports[s.i]; portFlash(g, q.p[0], q.p[1], t - s.t, 0.8); }
+  // After the grenade: fire in her waist.
+  const ba = t - T.blast;
+  if (ba > 0) drawFlames(g, Array.from({ length: 9 }, (_, k) => [J.hatch[0] - 110 + k * 26 + 8 * Math.sin(k * 7), J.hatch[1] + 6, 14 + 10 * rand3(k, 3, 9), 40 + k]), t, { k: 1.4 * Math.min(1, ba * 2) * (0.7 + 0.3 * Math.exp(-ba)), glowA: 0.3, sparks: 10, seed: 2343 });
+  g.restore();
+  // Broadside smoke rolling out toward us.
+  for (const q of J.broad) if (q.p[0] > 200 && (q.p[0] | 0) % 3 === 0) drawSmoke(g, PUFFS, tick, q.p[0], q.p[1] + heave, t - q.t, { dir: 1, wind: 16, seed: 2350 + (q.p[0] | 0), n: 3, size: 1.1, life: 7, rise: 14, alpha: 0.36 });
+  for (const s of J.shots) if (s.ser) { const q = J.ports[s.i]; drawSmoke(g, PUFFS, tick, q.p[0], q.p[1] + heave, t - s.t, { dir: 1, wind: 16, seed: 2360 + s.i, n: 2, size: 0.8, life: 5, rise: 12, alpha: 0.32 }); }
+  // The Richard's own guns fire from her far side: flashes between the hulls, smoke rising.
+  for (const s of J.shots) if (!s.ser) { const y = J.deck(J.ric, s.x) + heave - 10; portFlash(g, s.x, y, t - s.t, 1.1); drawSmoke(g, PUFFS, tick, s.x, y - 20, t - s.t, { dir: 1, wind: 14, seed: 2370 + (s.x | 0), n: 3, size: 0.9, life: 5, rise: 26, alpha: 0.36 }); }
+  // The explosion: a column of fire out of the Serapis's hatch.
+  if (ba > -0.05 && ba < 3.5) {
+    const k = smooth(clamp(ba / 0.25)) * Math.exp(-Math.max(0, ba - 0.4) * 1.2), c = [J.hatch[0], J.hatch[1] + heave];
+    drawFlames(g, Array.from({ length: 14 }, (_, i) => [c[0] - 120 + i * 18, c[1] + 4, 20 + 18 * rand3(i, 7, 7), 60 + i]), t, { k: 3.2 * k, glowA: 0.45 * k, glowStep: 2, sparks: 40, seed: 2344 });
+    drawSmoke(g, PUFFS, tick, c[0], c[1] - 180, ba - 0.2, { dir: 1, wind: 20, seed: 2345, n: 7, size: 1.6, life: 7, rise: 70, alpha: 0.42, spread: 1.6 });
+    g.fillStyle = '#1a1210'; for (let i = 0; i < 16; i++) { const r = mulberry32(hash3(i, 2346, 1)), vx = (r() - 0.5) * 700, vy = -300 - r() * 500, a2 = Math.max(0, ba); if (a2 > 2.2) break; const x = c[0] + vx * a2, y = c[1] - 60 + vy * a2 + 500 * a2 * a2; g.save(); g.translate(x, y); g.rotate(a2 * (r() * 12 - 6)); g.fillRect(-9, -3, 18, 6); g.restore(); }
+  }
+
+  /* ---- the Bonhomme Richard ---- */
+  g.save(); shipT(J.ric);
+  JON_LAYERS.ric.drawAt(g, tick, J.ric.x, J.ric.y, 1, 0, 1, -1);
+  // Scorched, burning canvas.
+  const lit_ = J.fires.filter(f => t > f.at);
+  drawFlames(g, lit_.map(f => [f.x, f.y, f.sz * smooth(invLerp(f.at, f.at + 2.2, t)), f.seed]), t, { k: 1, glowA: 0.3, glowStep: 2, sparks: 18, seed: 2347 });
+  // Her colours at the mizzen masthead.
+  const mzn = J.mast(0);
+  drawPole(g, mzn.x, mzn.top - 96, mzn.top + 4, tick, L, 5);
+  drawFlag(g, FLAGS.us, tick, mzn.x, mzn.top - 92, 168, 110, lt + 0.7, { dir: 1, amp: 9, waves: 1.3, speed: 1.3, ink: L.ink });
+  // On deck: a marine firing up into the Serapis's rigging, a hand hauling on a line, Jones aft.
+  {
+    const x = 620, P = carry(basePose(), 'present', { ang: -0.62 }), fa = (lt + 0.8) % 3.4;
+    const f = drawFigure(g, { x, y: J.deck(J.ric, x) + 6, s: 1.2, dir: -1, outfit: 'sailorA', seed: 2348, light: L }, P, tick);
+    if (f.muzzle) { portFlash(g, f.muzzle[0], f.muzzle[1], fa - 3.1, 0.25); drawSmoke(g, PUFFS, tick, f.muzzle[0], f.muzzle[1], fa - 3.1, { dir: -1, wind: 12, seed: 2349, n: 2, size: 0.4, life: 2, rise: 12, alpha: 0.6 }); }
+  }
+  {
+    const x = 300, P = basePose(), h = Math.sin(lt * 3.1); P.lean = 0.25 + 0.08 * h; P.nh = [30 + 10 * h, -150 + 50 * (0.5 + 0.5 * h)]; P.fh = [26 + 10 * h, -110 + 50 * (0.5 - 0.5 * h)]; P.ne = P.fe = [-1, 0.5]; P.nf = [20, -7]; P.ff = [-24, -7];
+    const f = drawFigure(g, { x, y: J.deck(J.ric, x) + 6, s: 1.2, dir: -1, outfit: 'sailorB', seed: 2351, light: L }, P, tick);
+    g.strokeStyle = lit('#b8a888', L); g.lineWidth = 2.4; g.beginPath(); g.moveTo(f.farHand[0] + 30, f.farHand[1] + 90); g.lineTo(f.hand[0], f.hand[1]); g.lineTo(J.mast(1).x - 20, J.mast(1).yards[2]); g.stroke();
+  }
+  // The grenadier out on the main yard drops his grenade down the Serapis's hatch.
+  {
+    const G = J.grenadier, P = basePose(), thr = smooth(invLerp(T.throw - 0.5, T.throw, t)) * (1 - smooth(invLerp(T.throw + 0.4, T.throw + 1.2, t)));
+    P.nh = [10, -176]; P.fh = [-4, -178]; P.ne = P.fe = [-1, -0.4];
+    if (thr > 0) { P.nh = lerp2(P.nh, [44, -90], thr); P.ne = [-0.5, 1]; P.lean = 0.3 * thr; P.head = 0.4 * thr; }
+    g.strokeStyle = lit('#2e2620', L); g.lineWidth = 2; g.beginPath(); g.moveTo(G.x - 60, G.y + 36); g.quadraticCurveTo(G.x, G.y + 54, G.x + 60, G.y + 36); g.stroke();
+    const f = drawFigure(g, { x: G.x, y: G.y + 44, s: 0.78, dir: -1, outfit: 'rowerA', seed: 2352, light: L }, P, tick);
+    const fly = invLerp(T.throw, T.blast, t);
+    if (t > T.throw - 0.8 && fly < 1) {
+      const p0 = fly <= 0 ? f.hand : [lerp(f.hand[0], J.hatch[0], fly), lerp(f.hand[1], J.hatch[1] - heave * 0 - 8, fly * fly)];
+      g.fillStyle = '#16120e'; g.beginPath(); g.arc(p0[0], p0[1] + 6, 8, 0, TAU); g.fill();
+      g.fillStyle = `rgba(255,${190 + 60 * Math.sin(t * 40)},90,1)`; g.beginPath(); g.arc(p0[0] + 5, p0[1], 3, 0, TAU); g.fill();
+    }
+  }
+  // Captain Jones on the quarterdeck: sword down, then raised as he answers the hail.
+  {
+    const x = 880, y = J.deck(J.ric, x) + 6, s = 1.3, P = basePose(), rise = smooth(invLerp(T.quote - 0.2, T.quote + 0.45, t)), lev = smooth(invLerp(T.quote + 5, T.quote + 5.8, t));
+    P.nf = [12, -7]; P.ff = [-16, -7]; P.fh = [-6, -104]; P.fe = [1, 0.6];
+    P.nh = [26, -80]; P.ne = [-1, 0.4];
+    P.head = -0.18 * pulse(t, T.hail + 0.5, 0.5, 1.8) + 0.05 * Math.sin(lt * 0.9);
+    if (rise > 0) { P.nh = lerp2(P.nh, lerp2([14, -206], [44, -160], lev), rise); P.ne = [-1, lerp(-0.3, 0.4, lev)]; P.lean = 0.02 - 0.06 * rise + 0.08 * lev; P.head += -0.2 * rise + 0.15 * lev; }
+    const f = drawFigure(g, { x, y, s, dir: -1, outfit: 'jones', seed: 2353, light: L }, P, tick);
+    const dirv = rise > 0 ? lerp2(lerp2([0.35, 0.94], [-0.2, -0.98], rise), [-0.94, -0.34], lev) : [-0.35, 0.94], l = Math.hypot(dirv[0], dirv[1]);
+    drawSword(g, f.hand, [f.hand[0] + dirv[0] / l * 120, f.hand[1] + dirv[1] / l * 120], L);
+  }
+  g.restore();
+  // The near sea, and the fire reflected in it.
+  JON_LAYERS.sea.drawAt(g, tick, 0, heave * 0.3, 1, 0, 1, 1);
+  if (fireK > 0) {
+    g.save(); g.globalCompositeOperation = 'lighter'; g.lineCap = 'round';
+    for (let k = 0; k < 40; k++) { const r = mulberry32(hash3(k, tick, 2354)), x = 60 + r() * 900, y = 1580 + r() * 380, w = 10 + r() * 34; g.strokeStyle = `rgba(255,${120 + r() * 80 | 0},50,${(0.12 + 0.2 * r()) * fireK * Math.exp(-(y - 1580) / 260)})`; g.lineWidth = 2 + r() * 2; g.beginPath(); g.moveTo(x - w / 2, y); g.lineTo(x + w / 2, y); g.stroke(); }
+    g.restore();
+  }
+  // Firelight over everything, and the flash of the broadside and the blast.
+  let flash = 0;
+  for (const q of J.broad) flash = Math.max(flash, 0.22 * Math.exp(-Math.max(0, t - q.t) * 8) * (t > q.t ? 1 : 0));
+  if (ba > 0) flash = Math.max(flash, 0.55 * Math.exp(-ba * 2.2));
+  const glow = 0.1 * fireK * (0.8 + 0.2 * vnoise(t * 6, 3));
+  if (flash + glow > 0.004) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,150,70,${flash + glow})`; g.fillRect(0, 0, 1080, 1920); g.restore(); }
+}
+function drawJonesOver(g, t, tick) {
+  const T = JON.T, u = easeOut3(invLerp(T.quote + 0.2, T.quote + 1.2, t)) * (1 - smooth(invLerp(T.quote + 5.4, T.quote + 6, t)));
+  drawRibbon(g, tick, 540, 200, u, '“I have not yet begun to fight!”', `italic 44px ${SERIF}`, { w: 470, seed: 231 });
+}
+function camJones(lt, t) {
+  const T = JON.T; let amp = 0;
+  for (const [tt, a] of [[T.broadside + 0.4, 22], [T.blast, 30]]) if (t > tt) amp += a * Math.exp(-(t - tt) * 3.5);
+  const keys = [[0, 1.0, 540, 1110], [4.5, 1.04, 550, 1120], [10.5, 1.45, 790, 1180], [17.5, 1.5, 780, 1190], [21.5, 1.06, 540, 1110], [24, 1.04, 540, 1110]];
+  let i = 0; while (i < keys.length - 2 && lt > keys[i + 1][0]) i++;
+  const [t0, z0, x0, y0] = keys[i], [t1, z1, x1, y1] = keys[i + 1], w = smooth(clamp((lt - t0) / (t1 - t0)));
+  return { z: lerp(z0, z1, w), x: lerp(x0, x1, w) + amp * vnoise(t * 25, 6), y: lerp(y0, y1, w) + amp * vnoise(t * 23, 7), rot: amp * 0.0006 * vnoise(t * 17, 8) };
+}
+SCN.jones = { layers: [JON_LAYERS.sky, JON_LAYERS.sea, JON_LAYERS.ser, JON_LAYERS.ric, FLAGS.red, FLAGS.us, ...PUFFS], draw: drawJones, cam: camJones, over: drawJonesOver };
+// Night at sea: wind and water, cannon in the dark; after the broadside a driving minor
+// march under the crackle of fire. Jones's answer is a brass call in D major; the blast;
+// then the victory, bright with glockenspiel.
+SCORE.jones = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, glock, pz, sn, flam, roll, bd, str, strH, brass } = K, J = JON, T = J.T;
+  hold(s.start, dur, (time, into) => N.windOn(time, into, dur));
+  hold(s.start, dur, (time, into) => N.harbourOn(time, into, dur));
+  hold(T.fire, s.end - T.fire, (time, into) => N.fireOn(time, into, s.end - T.fire, 0.45, 2));
+  hold(s.start, T.broadside - s.start, (time, into) => N.droneOn(['D2', 'A2'], time, into, T.broadside - s.start, 0.4));
+  for (let bb = 0; bb < 6; bb++) pz(B(bb), bb % 2 ? 'A2' : 'D2', 0.5, 0.4);
+  for (const sh of J.shots) one(sh.t, time => { N.volley(time, 1, 0.02, sh.ser ? 0.55 : 0.7); N.bd(time, sh.ser ? 0.35 : 0.45, 'A1'); });
+  roll(T.broadside - 1.2, T.broadside - 0.03, 0.05, 0.6, 0.04);
+  for (const q of J.broad) if (q.p[1] < 1370) one(q.t, time => N.volley(time, 1, 0.01, 0.8));
+  bd(T.broadside, 1, 'D1'); bd(T.broadside + 0.5, 0.8, 'G1');
+  // The minor march after the broadside.
+  for (let bb = 7; bb < 18; bb++) { bd(B(bb), bb % 2 ? 0.35 : 0.55, 'D2'); sn(B(bb + 0.5), 0.3); if (bb % 2 === 0) flam(B(bb), 0.35); pz(B(bb), bb % 4 < 2 ? 'D2' : 'A1', 0.55, 0.3); }
+  strH(B(7), B(18) - B(7), ['D3', 'F3', 'A3'], 0.28);
+  mel([[7, 'A4', 1], [8, 'D5', 1], [9, 'F5', 1.5], [10.5, 'E5', 0.5], [11, 'D5', 1], [12, 'C5', 1], [13, 'A4', 2], [15, 'Bb4', 1], [16, 'A4', 1], [17, 'G4', 0.5], [17.5, 'E4', 0.5]], 0.45);
+  // "I have not yet begun to fight!"
+  for (const [bb, n, d] of [[18, 'D4', 1], [19, 'A4', 0.5], [19.5, 'D5', 0.5], [20, 'F#5', 1.5], [21.5, 'E5', 0.5], [22, 'D5', 2]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.7);
+  strH(B(18), B(24) - B(18), ['D3', 'A3', 'F#4'], 0.34);
+  for (let bb = 18; bb < 24; bb++) { bd(B(bb), 0.5, 'D2'); sn(B(bb + 0.5), 0.3); }
+  // The grenade.
+  roll(T.throw - 0.4, T.blast - 0.03, 0.08, 0.7, 0.04);
+  one(T.blast, time => { N.volley(time, 4, 0.06, 1); N.thunk(time); N.crackle(time + 0.2, 0.6); }); bd(T.blast, 1, 'C1'); bd(T.blast + 0.3, 0.9, 'G1');
+  strH(T.blast, T.strike - T.blast, ['D3', 'G3', 'Bb3'], 0.3);
+  // The Serapis strikes.
+  for (const [bb, n, d] of [[29.5, 'A4', 0.5], [30, 'D5', 1], [31, 'F#5', 1], [32, 'A5', 1.5], [33.5, 'F#5', 0.5], [34, 'D5', 2]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.6);
+  mel([[29.5, 'A5', 0.5], [30, 'D6', 1], [31, 'F#6', 1], [32, 'A6', 1.5], [33.5, 'F#6', 0.5], [34, 'D6', 2]], 0.35);
+  strH(B(29.5), s.end - B(29.5) + 0.3, ['D3', 'A3', 'D4', 'F#4'], 0.4);
+  ['D6', 'F#6', 'A6', 'D7'].forEach((n, k) => glock(B(32) + k * 0.12, n, 0.28, 1.6));
+  one(T.strike + 0.6, time => N.cheer(time, 0.5, 1.6));
+};
+
 /* ===================== scene 6 — surrender at Yorktown, 1781 =============== */
 const YK = (() => {
   const s0 = sceneById.yorktown.start, S = 118, cyc = 1.8, s = 1.18, v = S / cyc * s;          // px per second
