@@ -6467,6 +6467,184 @@ function drawYorktown(g, t, lt, tick) {
 }
 function camYorktown(lt) { const u = smooth(clamp(lt / durOf('yorktown'))); return { z: lerp(1.16, 1.22, u), x: lerp(540, 562, u), y: lerp(1158, 1184, u), rot: 0 }; }
 
+/* ======================= a quill that writes a page ========================= */
+// A page written run by run: text lines revealed left to right, and pen paths for
+// flourishes and scrawl. `build(g, api)` lays the runs out once; the quill follows them.
+function makeScript(id, build, o = {}) {
+  const s0 = sceneById[id].start, dur = durOf(id), c = k => cue(id, k) - s0;
+  const runs = [], park = o.park || [1150, 120], ink = o.ink || '#23150c', tilt = o.tilt ?? -0.95;
+  let laid = false;
+  const item = (t0, t1, lines) => { const tot = lines.reduce((a, l) => a + l.w, 0) || 1; let a = t0; for (const l of lines) { const d = (t1 - t0) * l.w / tot; l.t0 = a; l.t1 = a + d; a += d; runs.push(l); } };
+  const textLines = (g, text, font, x, y, lh, maxW, align) => { g.font = font; return wrapText(g, text, maxW).map((s, i) => ({ kind: 'text', text: s, font, x, y: y + i * lh, w: g.measureText(s).width, align, size: parseFloat(font.match(/(\d+)px/)[1]) })); };
+  const fit = (g, text, font, maxW) => { g.font = font; const w = g.measureText(text).width; return w <= maxW ? font : font.replace(/(\d+)px/, (m, n) => Math.floor(n * maxW / w) + 'px'); };
+  // Lines of quick, unreadable handwriting.
+  const scrawl = (seed, x0, y0, n, lh, width, lastShort = true) => {
+    const r = mulberry32(seed), out = [];
+    for (let k = 0; k < n; k++) {
+      const y = y0 + k * lh, pts = []; let x = x0 + (k === 0 ? 40 : 0);
+      const xEnd = x0 + width - (k === n - 1 && lastShort ? width * 0.4 : r() * 30);
+      while (x < xEnd) { const wl = Math.min(30 + r() * 90, xEnd - x); for (let u = 0; u <= wl; u += 4) pts.push([x + u, y - 6 - 8 * Math.abs(Math.sin(u * 0.45 + r())) * (0.6 + 0.4 * r())]); pts.push(null); x += wl + 14; }
+      out.push({ kind: 'path', pts, w: xEnd - x0, width: 2.2 });
+    }
+    return out;
+  };
+  const api = { c, dur, runs, item, textLines, fit, scrawl, s0 };
+  const layout = g => { if (laid) return; laid = true; build(g, api); };
+  const left = r => (r.align === 'center' ? r.x - r.w / 2 : r.x);
+  const startOf = r => (r.kind === 'text' ? [left(r), r.y - r.size * 0.3] : r.pts.find(Boolean));
+  const endOf = r => (r.kind === 'text' ? [left(r) + r.w, r.y - r.size * 0.3] : r.pts.filter(Boolean).pop());
+  const pointIn = (r, p) => { if (r.kind === 'text') return { x: left(r) + r.w * p, y: r.y - r.size * (0.25 + 0.25 * Math.abs(Math.sin(p * r.w * 0.09))) }; const pts = r.pts.filter(Boolean), q = pts[Math.min(pts.length - 1, Math.floor(p * (pts.length - 1)))]; return { x: q[0], y: q[1] }; };
+  function nib(lt) {
+    let prev = null;
+    for (const r of runs) {
+      if (lt < r.t0) {
+        if (!prev) { const b = startOf(r), u = smooth(invLerp(r.t0 - 0.8, r.t0, lt)); return { x: lerp(park[0], b[0], u), y: lerp(park[1], b[1], u), writing: false }; }
+        const a = endOf(prev), b = startOf(r), u = smooth(invLerp(prev.t1, r.t0, lt));
+        return { x: lerp(a[0], b[0], u), y: lerp(a[1], b[1], u) - 30 * Math.sin(u * Math.PI), writing: false };
+      }
+      if (lt <= r.t1) return { ...pointIn(r, invLerp(r.t0, r.t1, lt)), writing: true };
+      prev = r;
+    }
+    const e = endOf(prev), u = smooth(invLerp(prev.t1 + 0.1, prev.t1 + 0.8, lt)); return { x: lerp(e[0], park[0], u), y: lerp(e[1], park[1], u), writing: false };
+  }
+  function draw(g, lt, tick, quill = true) {
+    const jx = (hash3(tick, 3) % 3 - 1) * 0.4, jy = (hash3(tick, 4) % 3 - 1) * 0.4;
+    g.fillStyle = ink; g.strokeStyle = ink; g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const r of runs) {
+      if (lt < r.t0) continue;
+      const p = clamp(invLerp(r.t0, r.t1, lt));
+      if (r.kind === 'text') {
+        g.font = r.font; g.textAlign = r.align;
+        if (p < 1) { g.save(); g.beginPath(); g.rect(left(r) - 8, r.y - r.size * 1.2, r.w * p + 8, r.size * 1.8); g.clip(); }
+        g.globalAlpha = 0.93; g.fillText(r.text, r.x + jx, r.y + jy); g.globalAlpha = 1;
+        if (p < 1) g.restore();
+      } else {
+        const n = Math.floor(r.pts.length * p);
+        g.lineWidth = r.width; g.globalAlpha = 0.85; g.beginPath();
+        let pen = false;
+        for (let i = 0; i < n; i++) { const q = r.pts[i]; if (!q) { pen = false; continue; } pen ? g.lineTo(q[0] + jx, q[1] + jy) : g.moveTo(q[0] + jx, q[1] + jy); pen = true; }
+        g.stroke(); g.globalAlpha = 1;
+      }
+    }
+    g.textAlign = 'left';
+    if (!quill) return;
+    const n = nib(lt), rng = mulberry32(hash3(tick, 45)), wig = n.writing ? 3 * Math.sin(lt * 40) : 0;
+    g.save(); g.globalAlpha = 0.22; g.fillStyle = '#2a170a'; g.translate(n.x + 26, n.y + 34); g.rotate(tilt + 0.1);
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(120, -18); g.lineTo(340, -10); g.lineTo(300, 12); g.lineTo(70, 8); g.closePath(); g.fill(); g.restore();
+    QUILL_TIP(g, n.x, n.y + wig, 1.05, tilt + (n.writing ? 0.04 * Math.sin(lt * 23) : 0), rng);
+  }
+  return Object.assign(api, { layout, draw, nib });
+}
+
+/* ====================== scene 27 — the Treaty of Paris, 1783 ================== */
+// Candlelight on green baize. The last page of the treaty: the closing line is written, then
+// the four commissioners sign, and each signature gets its seal pressed into red wax.
+const TRE_PAGE = (() => { const P = [], r = mulberry32(2701); for (let x = 110; x <= 970; x += 30) P.push([x, 150 + (r() - 0.5) * 4]); for (let y = 150; y <= 2040; y += 40) P.push([970 + (r() - 0.5) * 4, y]); for (let x = 970; x >= 110; x -= 30) P.push([x, 2040 + (r() - 0.5) * 4]); for (let y = 2040; y >= 150; y -= 40) P.push([110 + (r() - 0.5) * 4, y]); return P; })();
+const TRE_SIGS = [['D Hartley', 330, 1270, 190], ['John Adams', 770, 1270, 580], ['B Franklin', 770, 1440, 580], ['John Jay', 770, 1610, 580]];
+const TRE = makeScript('treaty', (g, A) => {
+  const c = A.c;
+  A.item(0.8, c('sign') - 0.5, A.textLines(g, 'Done at Paris, this third Day of September, In the Year of our Lord one thousand, seven hundred & eighty three.', `italic 34px ${SERIF}`, 170, 1010, 46, 740, 'left'));
+  let t = c('sign');
+  for (const [name, x, y] of TRE_SIGS) { A.item(t, t + 1.0, A.textLines(g, name, A.fit(g, name, `78px ${SCRIPT}`, 360), x, y, 0, 2000, 'center')); t += 1.3; }
+}, { park: [1120, 700], tilt: -0.9 });
+TRE.seal = k => TRE.s0 + TRE.c('sign') + k * 1.3 + 1.12;
+function* buildTreatyBg(g, rng) {
+  const box = { x0: -60, y0: -300, x1: 1140, y1: 2200 }, inP = polyMask([TRE_PAGE], box, 3);
+  // Green baize: a felted stipple over a flat ground, no stroke direction at all.
+  g.fillStyle = '#2c4232'; g.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+  yield* stippleG(g, rng, box, (x, y) => !inP(x, y), (x, y) => clamp(0.5 + 0.2 * fbm(x * 0.004, y * 0.004, 2702) - 0.25 * smooth(clamp(Math.hypot(x - 1010, y - 240) / 1500))), ['#1e3024', '#2a4030', '#36523c', '#46644a', '#587658'], { density: 0.09, size: 2.4 });
+  // Laid paper: a pale ground, chain lines down, laid lines across.
+  g.fillStyle = '#e6dcc4'; g.beginPath(); polyPath(g, TRE_PAGE); g.fill();
+  yield* pencilG(g, rng, { x0: 100, y0: 140, x1: 980, y1: 2050 }, inP, (x, y) => clamp(0.7 + 0.1 * fbm(x * 0.004, y * 0.003, 2703) - 0.4 * Math.exp(-Math.min(x - 110, 970 - x, y - 150, 2040 - y) / 30)), ['#b8aa88', '#cbbf9e', '#dcd2b6', '#e8e0c8', '#f2ecd8'],
+    { angle: 0, flow: FLOW.noise(0, 0.05, 0.003, 2703), curve: 0.1, gap: 3.6, len: [30, 70], cross: false, washAlpha: 0.3 });
+  g.strokeStyle = 'rgba(150,136,104,0.35)'; g.lineWidth = 1.5; g.beginPath(); for (let x = 136; x < 970; x += 27) { g.moveTo(x, 156); g.lineTo(x + (rng() - 0.5) * 3, 2034); } g.stroke();
+  sketchLine(g, TRE_PAGE.concat([TRE_PAGE[0]]), rng, 1.2, '#6a5434', 2, 0.8);
+  // The article already written, and the witnessing clause.
+  g.fillStyle = '#2a1c12'; g.globalAlpha = 0.9; g.font = `italic 44px ${SERIF}`; g.textAlign = 'center'; g.fillText('Art. 10th.', 540, 300);
+  g.font = `italic 31px ${SERIF}`; g.textAlign = 'left';
+  const para = (text, y) => { const L2 = wrapText(g, text, 740); L2.forEach((s, i) => g.fillText(s, 170 + (i === 0 ? 40 : 0), y + i * 42)); return y + L2.length * 42; };
+  let y = para('The solemn Ratifications of the present Treaty expedited in good & due Form shall be exchanged between the contracting Parties in the Space of Six Months or sooner if possible to be computed from the Day of the Signature of the present Treaty.', 380);
+  para('In Witness whereof we the undersigned their Ministers Plenipotentiary have in their Name and in Virtue of our Full Powers, signed with our Hands the present Definitive Treaty, and caused the Seals of our Arms to be affixed thereto.', y + 40);
+  g.globalAlpha = 1;
+  // Candle, sealing wax, sand shaker, on the baize.
+  g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(1030, 470, 90, 28, 0, 0, TAU); g.fill();
+  g.fillStyle = '#b08a3e'; g.beginPath(); g.ellipse(1010, 440, 80, 26, 0, 0, TAU); g.fill(); sketchLine(g, Array.from({ length: 25 }, (_, k) => [1010 + Math.cos(k / 24 * TAU) * 80, 440 + Math.sin(k / 24 * TAU) * 26]), rng, 0.8, '#3a2a14', 2, 0.9);
+  yield* pencilG(g, rng, { x0: 990, y0: 250, x1: 1032, y1: 440 }, (x, y) => x > 992 && x < 1030, (x) => clamp(0.9 - (x - 992) / 60), ['#c8bca0', '#ded4bc', '#efe8d6', '#fbf6ea'], { angle: -1.57, gap: 2.4, len: [10, 22], cross: false, wash: false });
+  g.fillStyle = '#b8342a'; g.save(); g.translate(1040, 1150); g.rotate(-0.3); g.fillRect(-12, -80, 24, 160); g.fillStyle = '#e25a44'; g.fillRect(-12, -80, 7, 160); g.strokeStyle = '#3a1410'; g.lineWidth = 2; g.strokeRect(-12, -80, 24, 160); g.restore();
+}
+const TRE_LAYER = new BoilLayer({ name: 'treatyBg', box: { x0: -60, y0: -300, x1: 1140, y1: 2200 }, res: 0.6, seed: 2704, build: buildTreatyBg });
+// A seal in red wax: a drip that spreads, then the stamp's impression.
+function drawSeal(g, x, y, t, tp, tick) {
+  const drip = smooth(invLerp(tp - 0.55, tp - 0.25, t)), pressed = t > tp + 0.06;
+  if (drip <= 0) return;
+  const rng = mulberry32(hash3(tick, x | 0, 2705)), R = 40 * drip;
+  g.fillStyle = '#9e2a22'; g.beginPath();
+  for (let k = 0; k <= 16; k++) { const a = k / 16 * TAU, rr = R * (1 + 0.1 * Math.sin(a * 5 + x) + (pressed ? 0.08 : 0)); g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.92); }
+  g.fill();
+  g.fillStyle = '#c84a38'; g.beginPath(); g.ellipse(x - R * 0.25, y - R * 0.3, R * 0.45, R * 0.28, -0.4, 0, TAU); g.fill();
+  if (pressed) {
+    g.strokeStyle = '#6a1a16'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 28, 0, TAU); g.stroke();
+    g.lineWidth = 2; g.beginPath(); g.arc(x, y, 21, 0, TAU); g.stroke();
+    g.font = `bold 22px ${SERIF}`; g.textAlign = 'center'; g.fillStyle = '#6a1a16'; g.fillText('L.S.', x, y + 8); g.textAlign = 'left';
+    g.strokeStyle = 'rgba(255,200,170,0.5)'; g.lineWidth = 1.6; g.beginPath(); g.arc(x - 1, y - 1, 28, Math.PI * 1.1, Math.PI * 1.6); g.stroke();
+  }
+  sketchLine(g, Array.from({ length: 17 }, (_, k) => [x + Math.cos(k / 16 * TAU) * R, y + Math.sin(k / 16 * TAU) * R * 0.92]), rng, 0.8, '#4a1210', 1.6, 0.8);
+}
+// The brass seal-stamp: carried from seal to seal, pressed down, lifted.
+function drawStamp(g, t, tick) {
+  const rest = [1060, 1560], P = TRE_SIGS.map(([, x, y, sx], k) => ({ p: [sx, y - 12], tp: TRE.seal(k) }));
+  let pos = rest, h = 60;
+  for (let k = 0; k < P.length; k++) {
+    const q = P[k], from = k ? P[k - 1].p : rest;
+    if (t < q.tp - 0.7) { if (k === 0) break; continue; }
+    const mv = smooth(invLerp(q.tp - 0.7, q.tp - 0.2, t)), press = pulse(t, q.tp + 0.05, 0.2, 0.25);
+    pos = lerp2(from, q.p, mv); h = 60 - 58 * press;
+    if (k === P.length - 1 && t > q.tp + 0.4) { const back = smooth(invLerp(q.tp + 0.4, q.tp + 1.1, t)); pos = lerp2(q.p, rest, back); h = 60; }
+  }
+  const rng = mulberry32(hash3(tick, 2706));
+  g.fillStyle = `rgba(20,14,8,${0.35 - h / 400})`; g.beginPath(); g.ellipse(pos[0] + h * 0.8, pos[1] + h * 0.9, 34, 30, 0, 0, TAU); g.fill();
+  const x = pos[0], y = pos[1] - h;
+  g.fillStyle = '#9a7a38'; g.beginPath(); g.ellipse(x, y, 34, 31, 0, 0, TAU); g.fill();
+  g.fillStyle = '#c9a55a'; g.beginPath(); g.ellipse(x - 6, y - 6, 20, 17, 0, 0, TAU); g.fill();
+  g.fillStyle = '#4a2c18'; g.beginPath(); g.ellipse(x - 4, y - 8, 17, 15, 0, 0, TAU); g.fill();
+  g.fillStyle = '#6a4226'; g.beginPath(); g.ellipse(x - 8, y - 12, 8, 6, 0, 0, TAU); g.fill();
+  sketchLine(g, Array.from({ length: 21 }, (_, k) => [x + Math.cos(k / 20 * TAU) * 34, y + Math.sin(k / 20 * TAU) * 31]), rng, 0.8, '#2a1a0c', 1.8, 0.9);
+}
+function drawTreaty(g, t, lt, tick) {
+  TRE.layout(g);
+  TRE_LAYER.draw(g, tick);
+  TRE_SIGS.forEach(([, x, y, sx], k) => drawSeal(g, sx, y - 12, t, TRE.seal(k), tick));
+  TRE.draw(g, lt, tick);
+  drawStamp(g, t, tick);
+  // Candle flame and its light.
+  const fl = 0.85 + 0.15 * vnoise(t * 7, 2707), fx = 1011 + 3 * vnoise(t * 5, 2708), fy = 238;
+  g.save(); g.globalCompositeOperation = 'lighter';
+  const gr = g.createRadialGradient(fx, fy, 0, fx, fy, 700 * fl); gr.addColorStop(0, `rgba(255,200,120,${0.3 * fl})`); gr.addColorStop(0.4, `rgba(255,170,90,${0.1 * fl})`); gr.addColorStop(1, 'rgba(255,140,60,0)');
+  g.fillStyle = gr; g.fillRect(fx - 700, fy - 700, 1400, 1400); g.restore();
+  g.fillStyle = '#ffd98a'; g.beginPath(); g.moveTo(fx - 9, fy + 12); g.quadraticCurveTo(fx - 10, fy - 10, fx + 2 * vnoise(t * 9, 2709), fy - 40 * fl); g.quadraticCurveTo(fx + 10, fy - 10, fx + 9, fy + 12); g.fill();
+  g.fillStyle = '#fff4d0'; g.beginPath(); g.ellipse(fx, fy + 4, 4, 10, 0, 0, TAU); g.fill();
+  g.strokeStyle = '#2a2016'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(fx, fy + 12); g.lineTo(fx + 1, fy + 2); g.stroke();
+  // The room is dark beyond the candle's reach.
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); const v = g.createRadialGradient(700, 700, 300, 540, 960, 1300); v.addColorStop(0, 'rgba(10,6,4,0)'); v.addColorStop(1, 'rgba(10,6,4,0.55)'); g.fillStyle = v; g.fillRect(0, 0, 1080, 1920); g.restore();
+}
+function camTreaty(lt) {
+  const c = TRE.c;
+  return { z: track([[0, 1.02], [c('sign') - 0.6, 1.04], [c('sign') + 3, 1.12], [durOf('treaty'), 1.16]])(lt), x: track([[0, 540], [c('sign'), 560], [durOf('treaty'), 580]])(lt), y: track([[0, 760], [c('sign') - 0.8, 1060], [c('sign') + 1.5, 1330], [durOf('treaty'), 1380]])(lt), rot: 0 };
+}
+SCN.treaty = { layers: [TRE_LAYER], draw: drawTreaty, cam: camTreaty };
+// A gracious minuet in G for the signing: strings, harpsichord-like plucks, the quill's scratch,
+// the soft knock of each seal; a bell at the end.
+SCORE.treaty = (K, { B, b, s, dur, mel }) => {
+  const { N, one, glock, bell, pz, str, strH } = K;
+  const bars = [['G2', ['G3', 'B3', 'D4']], ['D2', ['F#3', 'A3', 'D4']], ['E2', ['G3', 'B3', 'E4']], ['C2', ['G3', 'C4', 'E4']], ['G2', ['G3', 'B3', 'D4']], ['A2', ['E3', 'A3', 'C#4']], ['D2', ['F#3', 'A3', 'D4']], ['G2', ['G3', 'B3', 'D4']]];
+  bars.forEach(([bass, ch], i) => { pz(B(i * 3), bass, 0.55, 0.5); str(B(i * 3), 3 * b * 0.95, ch, 0.24); pz(B(i * 3 + 1), ch[0], 0.3, 0.3); pz(B(i * 3 + 2), ch[1], 0.3, 0.3); });
+  mel([[0, 'D5', 2], [2, 'B4', 1], [3, 'A4', 1], [4, 'B4', 0.5], [4.5, 'C5', 0.5], [5, 'D5', 1], [6, 'E5', 2], [8, 'D5', 1], [9, 'C5', 2], [11, 'B4', 1], [12, 'G5', 2], [14, 'F#5', 1], [15, 'E5', 1.5], [16.5, 'C#5', 0.5], [17, 'A4', 1], [18, 'D5', 1], [19, 'E5', 1], [20, 'F#5', 1], [21, 'G5', 3]], 0.4, 0, (tt, n, d, v) => glock(tt, n, v * 0.7, d));
+  for (let tt = s.start + 0.9; tt < s.start + TRE.c('sign') - 0.5; tt += 0.11 + 0.08 * Math.abs(Math.sin(tt * 13))) one(tt, time => N.quill(time, 0.18));
+  for (let k = 0; k < 4; k++) { const t0 = s.start + TRE.c('sign') + k * 1.3; for (let tt = t0; tt < t0 + 1; tt += 0.09) one(tt, time => N.quill(time, 0.22)); one(TRE.seal(k) + 0.05, time => N.gavel(time, 0.35)); }
+  bell(B(21), 'G4', 0.4, 4); bell(B(21) + 0.02, 'D5', 0.25, 4);
+  strH(B(21), s.end - B(21) + 0.3, ['G3', 'B3', 'D4', 'G4'], 0.3);
+};
+
 /* ======================= scene 7 — peace, 1783 ============================= */
 function* buildPeaceBg(g, rng) {
   const box = { x0: -40, y0: -40, x1: 1120, y1: 1960 }, sun = { x: 330, y: 1000, r: 112 };
