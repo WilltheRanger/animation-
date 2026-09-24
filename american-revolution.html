@@ -6889,6 +6889,145 @@ SCORE.constitution = (K, { B, b, s, dur, mel }) => {
   bell(B(ob + 1.5), 'C4', 0.35, 4); bell(B(ob + 2.5), 'G4', 0.28, 4);
 };
 
+/* ==================== scene 30 — the first President, 1789 ==================== */
+// Federal Hall, Wall Street, a spring morning. On the balcony Washington lays his hand on
+// the Bible and takes the oath; Livingston turns to the street, "Long live George
+// Washington, President of the United States!", and the crowd roars; thirteen guns.
+const INA_LIGHT = { tint: '#f6ecd6', amt: 0.04, dark: 0, ink: '#20160e', dir: [-0.5, -0.86] };
+const INA = (() => {
+  const s0 = sceneById.inauguration.start, B = beatOf('inauguration'), T = { oath: cue('inauguration', 'oath'), cheer: cue('inauguration', 'cheer') };
+  T.kiss = T.oath + 1.5; T.bow = T.cheer + 1.6;
+  const r = mulberry32(3001), crowd = [];
+  for (let row = 0; row < 12; row++) for (let x = -80 + (row % 2) * 30; x < 1160; x += 52 + r() * 16) crowd.push({ x: x + (r() - 0.5) * 20, y: 1560 + row * 44 + (r() - 0.5) * 10, s: 0.95 + row * 0.06, hat: r(), coat: ['#3a3f52', '#5a4632', '#6e2a24', '#2e3a2c', '#4a3b53', '#7a6448', '#2b3550'][(r() * 7) | 0], skin: r() < 0.5 ? '#d9a27e' : '#e2b391', ph: r() * 6, eager: r() });
+  return { s0, B, T, crowd, floor: 1150, guns: Array.from({ length: 13 }, (_, k) => T.cheer + 0.3 + k * 0.42) };
+})();
+function* buildFederalHall(g, rng) {
+  const L = INA_LIGHT, box = { x0: -80, y0: -120, x1: 1160, y1: 2100 };
+  // A clear spring sky, a few clouds blowing over.
+  g.fillStyle = '#a8c0d4'; g.fillRect(box.x0, box.y0, box.x1 - box.x0, 700);
+  yield* pencilG(g, rng, { x0: box.x0, y0: box.y0, x1: box.x1, y1: 560 }, () => true, (x, y) => clamp(0.35 + 0.45 * (y - box.y0) / 680 + 0.25 * clamp(fbm(x * 0.003, y * 0.008, 3002) + 0.1)), ['#6e90b0', '#86a4c0', '#a0b8cc', '#bccbd8', '#d8e0e4', '#eef0ec'],
+    { angle: 0.2, flow: FLOW.noise(0.2, 0.2, 0.002, 3002), curve: 0.3, gap: 3.8, len: [24, 50], crossAngle: -0.6, crossAmt: 0.25, washAlpha: 0.45 });
+  // Trinity's steeple down the street, and brick houses either side of the Hall.
+  const sp = [[14, 520], [14, 300], [34, 270], [44, 120], [54, 270], [74, 300], [74, 520]];
+  g.fillStyle = lit('#9a9486', L); g.beginPath(); polyPath(g, sp); g.fill(); sketchLine(g, sp, rng, 0.6, L.ink, 1.6, 0.8);
+  g.fillStyle = lit('#3a3630', L); g.fillRect(36, 330, 16, 28);
+  for (const [x0, x1, y0] of [[-80, 96, 560], [984, 1160, 520]]) {
+    const H = [[x0, 1700], [x0, y0], [x1, y0], [x1, 1700]];
+    g.fillStyle = lit('#8a4a34', L); g.beginPath(); polyPath(g, H); g.fill();
+    yield* pencilG(g, rng, bboxOf(H), (x, y) => inPoly(H, x, y), (x, y) => clamp(0.5 + 0.1 * fbm(x * 0.02, y * 0.05, 3011)), ['#5e2e20', '#743a28', '#8a4a34', '#a05c42'].map(c => lit(c, L)), { angle: 0, gap: 2.6, len: [8, 16], crossAngle: 1.57, crossAmt: 0.15 });
+    for (let y = y0 + 60; y < 1560; y += 150) for (let x = x0 + 24; x < x1 - 40; x += 70) { g.fillStyle = lit('#2a2622', L); g.fillRect(x, y, 34, 70); g.strokeStyle = lit('#e8e0cc', L); g.lineWidth = 3; g.strokeRect(x, y, 34, 70); g.beginPath(); g.moveTo(x + 17, y); g.lineTo(x + 17, y + 70); g.moveTo(x, y + 35); g.lineTo(x + 34, y + 35); g.stroke(); }
+    g.fillStyle = lit('#4a4038', L); g.fillRect(x0 - 10, y0 - 14, x1 - x0 + 20, 16);
+  }
+  // The pediment and entablature.
+  const ped = [[120, 520], [540, 330], [960, 520]];
+  g.fillStyle = lit('#e4d8bc', L); g.beginPath(); polyPath(g, ped); g.fill();
+  yield* pencilG(g, rng, bboxOf(ped), (x, y) => inPoly(ped, x, y), (x, y) => clamp(0.6 + 0.2 * (y - 330) / 190), ['#b8aa8a', '#cbbf9e', '#ddd2b6', '#ebe2ca'].map(c => lit(c, L)), { angle: 0, gap: 3, len: [16, 34], crossAngle: 0.43, crossAmt: 0.3 });
+  sketchLine(g, ped.concat([ped[0]]), rng, 0.8, L.ink, 2.4, 0.9);
+  // An eagle in the tympanum: spread wings, a shield.
+  g.fillStyle = lit('#b89a5a', L); g.beginPath(); g.moveTo(540, 400); g.quadraticCurveTo(470, 380, 420, 440); g.quadraticCurveTo(480, 430, 520, 470); g.lineTo(560, 470); g.quadraticCurveTo(600, 430, 660, 440); g.quadraticCurveTo(610, 380, 540, 400); g.fill();
+  g.fillStyle = lit('#f2ead6', L); g.fillRect(526, 430, 28, 34); g.fillStyle = lit('#b3342b', L); for (let k = 0; k < 4; k++) g.fillRect(527 + k * 7, 446, 3.5, 18); g.fillStyle = lit('#2b3560', L); g.fillRect(526, 430, 28, 12);
+  const ent = [[90, 520], [990, 520], [990, 590], [90, 590]];
+  g.fillStyle = lit('#dccfb2', L); g.beginPath(); polyPath(g, ent); g.fill();
+  for (let x = 110; x < 980; x += 44) { g.fillStyle = lit('#b8aa8a', L); g.fillRect(x, 550, 14, 36); }
+  sketchLine(g, ent.concat([ent[0]]), rng, 0.8, L.ink, 2, 0.9);
+  // The loggia: deep shade behind the columns.
+  g.fillStyle = lit('#4e4638', L); g.fillRect(90, 590, 900, 560);
+  yield* pencilG(g, rng, { x0: 90, y0: 590, x1: 990, y1: 1150 }, () => true, (x, y) => clamp(0.3 + 0.2 * (y - 590) / 560), ['#2e2820', '#3e362a', '#4e4638', '#625846'].map(c => lit(c, L)), { angle: -1.2, gap: 3, len: [20, 40], crossAngle: 0.3, crossAmt: 0.4 });
+  // The street front below: rusticated stone and arches.
+  g.fillStyle = lit('#cfc2a4', L); g.fillRect(-80, 1150, 1240, 520);
+  yield* pencilG(g, rng, { x0: -80, y0: 1150, x1: 1160, y1: 1680 }, () => true, (x, y) => clamp(0.55 + 0.12 * fbm(x * 0.01, y * 0.02, 3003) - (((y - 1150) % 44) < 4 ? 0.3 : 0)), ['#8e8268', '#a89c80', '#c0b496', '#d4c9ac', '#e2d8be'].map(c => lit(c, L)),
+    { angle: 0, gap: 3, len: [20, 44], crossAngle: 1.57, crossAmt: 0.2 });
+  for (const x of [130, 400, 680, 950]) { const P = archWin(x - 80, 1250, x + 80, 1680); g.fillStyle = lit('#3a3226', L); g.beginPath(); polyPath(g, P); g.fill(); sketchLine(g, P, rng, 0.8, L.ink, 2, 0.9); }
+}
+function* buildFederalColumns(g, rng) {
+  const L = INA_LIGHT;
+  for (const x of [150, 390, 690, 930]) {
+    const P = [[x - 40, 1150], [x - 36, 600], [x + 36, 600], [x + 40, 1150]];
+    g.fillStyle = lit('#e0d4b8', L); g.beginPath(); polyPath(g, P); g.fill();
+    yield* pencilG(g, rng, bboxOf(P), (px, py) => inPoly(P, px, py), (px) => clamp(0.75 - 0.5 * Math.abs(px - x + 12) / 40 - (Math.abs(((px - x + 40) % 12) - 6) < 1.2 ? 0.2 : 0)), ['#9e9274', '#b8ac8e', '#d0c5a8', '#e6dcc4', '#f2eada'].map(c => lit(c, L)), { angle: -1.5708, wander: 0.02, curve: 0.02, gap: 2.2, len: [30, 70], cross: false });
+    g.fillStyle = lit('#d8ccae', L); g.fillRect(x - 50, 588, 100, 16); g.fillRect(x - 48, 1132, 96, 18);
+    sketchLine(g, P, rng, 0.6, L.ink, 1.8, 0.85);
+  }
+  // The balcony railing.
+  g.fillStyle = lit('#1e1c1a', L); g.fillRect(90, 1070, 900, 8); g.fillRect(90, 1140, 900, 10);
+  g.strokeStyle = lit('#1e1c1a', L); g.lineWidth = 3; g.beginPath(); for (let x = 96; x < 990; x += 16) { g.moveTo(x, 1078); g.lineTo(x, 1140); } g.stroke();
+  g.lineWidth = 2; g.beginPath(); for (let x = 104; x < 990; x += 32) { g.moveTo(x + 6, 1100); g.arc(x, 1100, 6, 0, TAU); } g.stroke();
+}
+const INA_LAYERS = {
+  hall: new BoilLayer({ name: 'federalHall', box: { x0: -80, y0: -120, x1: 1160, y1: 1700 }, res: 0.62, seed: 3004, build: buildFederalHall }),
+  cols: new BoilLayer({ name: 'federalCols', box: { x0: 80, y0: 580, x1: 1000, y1: 1160 }, res: 0.8, seed: 3005, build: buildFederalColumns }),
+};
+function drawInauguration(g, t, lt, tick) {
+  const I = INA, T = I.T, L = INA_LIGHT, fl = I.floor;
+  INA_LAYERS.hall.draw(g, tick);
+  // The flag over the pediment.
+  drawPole(g, 540, 100, 336, tick, L, 7);
+  drawFlag(g, FLAGS.us, tick, 540, 106, 250, 164, lt, { dir: 1, amp: 12, waves: 1.3, speed: 1.1 });
+  // A salute of thirteen guns from the Battery, smoke rising over the roofs.
+  I.guns.forEach((gt, k) => drawSmoke(g, PUFFS, tick, 1180 + (k % 3) * 40, 330 + (k % 2) * 40, t - gt, { dir: -1, wind: -22, seed: 3006 + k, n: 2, size: 0.7, life: 6, rise: 12, alpha: 0.35 }));
+  // On the balcony: Adams behind, Otis with the Bible, Washington, Livingston.
+  const Sx = 1.5;
+  { const P = basePose(); P.head = 0.05; P.fh = [-8, -100]; P.fe = [1, 0.5]; drawFigure(g, { x: 290, y: fl - 20, s: Sx * 0.96, dir: 1, outfit: 'delegateC', seed: 3007, light: L }, P, tick); }
+  const kiss = pulse(t, T.kiss, 0.5, 0.6), cheer = smooth(invLerp(T.cheer, T.cheer + 0.4, t)), bow = pulse(t, T.bow, 0.5, 0.8);
+  // Otis holds the crimson cushion with the Bible.
+  const bible = [640, fl - 128 * Sx];
+  { const P = basePose(); P.nh = [34, -120]; P.fh = [28, -118]; P.ne = P.fe = [-1, 0.6]; P.lean = 0.04; drawFigure(g, { x: 600, y: fl - 8, s: Sx * 0.94, dir: 1, outfit: 'delegateA', seed: 3008, light: L }, P, tick); }
+  // Livingston: reads the oath, then turns to the street and proclaims.
+  const turned = t > T.cheer;
+  { const P = basePose(); if (!turned) { P.nh = [34, -150]; P.ne = [-1, 0.3]; P.head = -0.05; } else { P.nh = lerp2([20, -120], [26, -206], cheer); P.ne = [-1, -0.3]; P.head = -0.15 * cheer; }
+    drawFigure(g, { x: 800, y: fl, s: Sx, dir: turned ? 1 : -1, outfit: 'livingston', seed: 3009, light: L }, P, tick); }
+  g.fillStyle = lit('#8a1e1c', L); g.beginPath(); g.ellipse(bible[0], bible[1] + 12, 50, 13, 0, 0, TAU); g.fill();
+  g.fillStyle = lit('#c9a55a', L); for (const dx of [-48, 48]) { g.beginPath(); g.arc(bible[0] + dx, bible[1] + 16, 5, 0, TAU); g.fill(); }
+  g.fillStyle = lit('#2a1a14', L); g.fillRect(bible[0] - 30, bible[1] - 10, 60, 20); g.fillStyle = lit('#e8dcc0', L); g.fillRect(bible[0] - 28, bible[1] - 12, 56, 5); g.fillStyle = lit('#c9a55a', L); g.fillRect(bible[0] - 3, bible[1] - 6, 6, 12);
+  // Washington, in brown broadcloth: hand on the Bible, bends to kiss it, then bows to the crowd.
+  {
+    const P = basePose(), onB = 1 - smooth(invLerp(T.cheer - 0.2, T.cheer + 0.3, t));
+    const loc = w => [(w[0] - 520) / Sx, (w[1] - fl) / Sx];
+    P.nh = lerp2([20, -84], loc([bible[0] - 6, bible[1] - 12]), onB); P.ne = [-0.5, 1]; P.fh = [4, -128]; P.fe = [-1, 0.2];
+    P.lean = 0.04 + 0.34 * kiss + 0.3 * bow; P.head = 0.05 + 0.5 * kiss + 0.3 * bow;
+    drawFigure(g, { x: 520, y: fl, s: Sx, dir: 1, outfit: 'washingtonCivil', seed: 3010, light: L }, P, tick);
+  }
+  INA_LAYERS.cols.draw(g, tick);
+  // The crowd in Wall Street: hushed, then hats in the air.
+  for (const c of I.crowd) {
+    const go = smooth(invLerp(T.cheer + 0.1 + c.eager * 0.5, T.cheer + 0.4 + c.eager * 0.5, t)), bob = go * Math.abs(Math.sin(t * (5 + c.eager * 3) + c.ph)) * 12;
+    const x = c.x, y = c.y - bob, s = c.s, rng = mulberry32(hash3(tick, x | 0, y | 0));
+    g.fillStyle = lit(c.coat, L); g.beginPath(); g.ellipse(x, y + 40 * s, 30 * s, 34 * s, 0, 0, TAU); g.fill();
+    g.fillStyle = lit(c.skin, L); g.beginPath(); g.arc(x, y, 15 * s, 0, TAU); g.fill();
+    sketchLine(g, Array.from({ length: 9 }, (_, k) => [x + Math.cos(k / 8 * TAU) * 15 * s, y + Math.sin(k / 8 * TAU) * 15 * s]), rng, 0.5, L.ink, 1.3, 0.7);
+    const hatUp = go * (c.eager > 0.35 ? 1 : 0), hx = x + 22 * s * hatUp, hy = y - 16 * s - hatUp * (40 + 26 * Math.sin(t * 7 + c.ph)) * s;
+    if (hatUp > 0) { g.strokeStyle = lit(c.coat, L); g.lineWidth = 9 * s; g.lineCap = 'round'; g.beginPath(); g.moveTo(x + 14 * s, y + 24 * s); g.lineTo(hx, hy + 10 * s); g.stroke(); g.fillStyle = lit(c.skin, L); g.beginPath(); g.arc(hx, hy + 8 * s, 6 * s, 0, TAU); g.fill(); }
+    g.fillStyle = lit(c.hat < 0.6 ? '#1f1c1a' : '#3a3026', L); g.beginPath();
+    if (c.hat < 0.6) { g.moveTo(hx - 20 * s, hy); g.lineTo(hx, hy - 12 * s); g.lineTo(hx + 20 * s, hy); g.lineTo(hx, hy + 4 * s); }
+    else { g.ellipse(hx, hy + 2 * s, 20 * s, 5 * s, 0, 0, TAU); g.rect(hx - 11 * s, hy - 12 * s, 22 * s, 14 * s); }
+    g.fill();
+  }
+}
+function camInauguration(lt, t) {
+  const T = INA.T, s0 = INA.s0, ch = T.cheer - s0; let amp = 0; for (const gt of INA.guns) if (t > gt) amp += 1.5 * Math.exp(-(t - gt) * 5);
+  return { z: track([[0, 1.4], [ch - 0.5, 1.5], [ch + 3, 1.15], [durOf('inauguration'), 0.98]])(lt), x: track([[0, 620], [ch - 0.5, 640], [ch + 3, 560], [durOf('inauguration'), 540]])(lt) + amp * vnoise(t * 20, 11), y: track([[0, 900], [ch - 0.5, 920], [ch + 3, 1060], [durOf('inauguration'), 1100]])(lt), rot: 0 };
+}
+SCN.inauguration = { layers: [INA_LAYERS.hall, INA_LAYERS.cols, FLAGS.us, ...PUFFS], draw: drawInauguration, cam: camInauguration };
+// A hush and a hymn in D for the oath; then the crowd's roar, thirteen guns, all the bells,
+// and a full-throated march.
+SCORE.inauguration = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, bell, glock, pz, sn, flam, roll, bd, str, strH, brass } = K, I = INA, T = I.T;
+  hold(s.start, T.cheer - s.start, (time, into) => N.crowdOn(time, into, T.cheer - s.start, 0.08, 1));
+  strH(s.start, T.oath - s.start, ['D3', 'A3', 'F#4'], 0.2);
+  strH(T.oath, T.cheer - T.oath, ['G2', 'D3', 'B3', 'G4'], 0.26);
+  mel([[0, 'F#4', 2], [2, 'A4', 1], [3, 'G4', 1], [4, 'F#4', 2], [6, 'E4', 1], [7, 'D4', 2], [9, 'E4', 1], [10, 'F#4', 1]], 0.26, 0, (tt, n, d, v) => str(tt, d * 0.95, [n], v));
+  one(T.cheer, time => N.cheer(time, 1, 2.6)); one(T.cheer + 1.1, time => N.cheer(time, 0.8, 2)); one(T.cheer + 2.4, time => N.cheer(time, 0.6, 1.8));
+  hold(T.cheer, s.end - T.cheer, (time, into) => N.crowdOn(time, into, s.end - T.cheer, 0.55, 1.2));
+  for (const gt of I.guns) { one(gt, time => N.volley(time, 1, 0.01, 0.55)); bd(gt, 0.5, 'G1'); }
+  for (let k = 0; k < 14; k++) { bell(T.cheer + 0.2 + k * 0.55, ['D5', 'A4', 'F#4', 'D4'][k % 4], 0.3, 3); if (k % 2 === 0) bell(T.cheer + 0.47 + k * 0.55, ['B4', 'G4'][k / 2 % 2], 0.22, 3); }
+  const cb = (T.cheer - s.start) / b;
+  mel([[cb, 'D5', 1], [cb + 1, 'D5', 0.5], [cb + 1.5, 'E5', 0.5], [cb + 2, 'F#5', 1], [cb + 3, 'D5', 1], [cb + 4, 'A5', 1.5], [cb + 5.5, 'G5', 0.5], [cb + 6, 'F#5', 1], [cb + 7, 'E5', 1], [cb + 8, 'D5', 1], [cb + 9, 'F#5', 1], [cb + 10, 'A5', 1], [cb + 11, 'D6', 2]], 0.6);
+  for (const [bb, ch] of [[cb, ['D3', 'A3', 'F#4']], [cb + 2, ['G2', 'D3', 'B3']], [cb + 4, ['D3', 'A3', 'F#4']], [cb + 6, ['A2', 'E3', 'C#4']], [cb + 8, ['D3', 'A3', 'F#4']]]) brass(B(bb), 2 * b * 0.95, ch, 0.5);
+  for (let bb = Math.ceil(cb); bb < 24; bb++) { flam(B(bb), 0.4); sn(B(bb + 0.5), 0.25); bd(B(bb), bb % 2 ? 0.35 : 0.6, 'D2'); }
+  strH(B(cb), s.end - B(cb) + 0.3, ['D3', 'A3', 'D4', 'F#4'], 0.36);
+  ['D6', 'F#6', 'A6', 'D7'].forEach((n, k) => glock(B(22) + k * 0.12, n, 0.3, 1.6));
+};
+
 /* ======================= scene 7 — peace, 1783 ============================= */
 function* buildPeaceBg(g, rng) {
   const box = { x0: -40, y0: -40, x1: 1120, y1: 1960 }, sun = { x: 330, y: 1000, r: 112 };
