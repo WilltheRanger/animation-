@@ -213,8 +213,8 @@ const SCENE_LIST = [
   ['lexington',    'Apr 1775',      22, { halt: 14 / 32, ready: 16 / 32, aim: 17.5 / 32, fire: 19 / 32, reply: 21 / 32, march: 27 / 32 }],
   ['concord',      'Apr 1775',      18, { fire: 8 / 24, retreat: 12 / 24 }],
   ['bunker',       'Jun 1775',      26, { volley: 16 / 36, second: 26 / 36 }],
-  ['command',      'Jul 1775',      18, {}],
-  ['paine',        'Jan 1776',      18, {}],
+  ['command',      'Jul 1775',      18, { halt: 11 / 30, sword: 14 / 30, cheer: 20 / 30 }],
+  ['paine',        'Jan 1776',      18, { lift: 13 / 30, page: 15 / 30, copies: 22 / 30 }],
   ['declaration',  'Jul 1776',      24, { header: 0.03, title: 0.1, preamble: 0.26, truths: 0.4, more: 0.63, sign: 0.69, others: 0.86 }],
   ['statue',       'Jul 1776',      16, { fall: 16 / 28 }],
   ['retreat',      'Aug 1776',      16, {}],
@@ -1206,7 +1206,7 @@ function drawFigure(g, F, P, tick) {
   if (O.longHair) add(H([[-14, 1], [-16, 10], [-15, 22], [-9, 25], [-5, 16], [-6, 6]]), col(O.hair));
   const ear = []; for (let k = 0; k < 8; k++) ear.push([-1.5 + Math.cos(k / 8 * TAU) * 3, 1 + Math.sin(k / 8 * TAU) * 4.5]);
   add(H(ear), mix(col(O.skin), L.ink, 0.12), { line: 0.7 });
-  const hat = HATS[O.hat];
+  const hat = F.hideHat ? null : HATS[O.hat];
   if (hat) {
     add(H(hat.crown), col(hat.plate ? O.hatBack || '#8a2b22' : O.hatCol), hat.soft ? { line: 0.7 } : {});
     if (hat.plate) add(H(hat.plate), col(O.hatCol), { line: 0.8 });
@@ -1298,6 +1298,16 @@ function* flagBuild(g, rng, kind) {
     g.strokeStyle = 'rgba(90,30,24,0.45)'; g.lineWidth = 1.4; g.beginPath();
     for (let k = 1; k < 13; k++) { const y = k * h / 13; g.moveTo(k < 7 ? cw : 0, y); g.lineTo(w, y); }
     g.stroke();
+  } else if (kind === 'pine') {
+    // The "Appeal to Heaven" flag: a green pine on white.
+    yield* pencilG(g, rng, box, () => true, tone, WHITE, { flow: FLOW.noise(0.05, 0.3, 0.01, 7), curve: 0.3, gap: 3.8, len: [9, 16], cross: false });
+    const tr = []; for (let k = 0; k <= 6; k++) { const y = 40 + k * 22, hw = 16 + k * 11; tr.push([[195 - hw, y + 26], [195, y - 6], [195 + hw, y + 26]]); }
+    g.fillStyle = '#3f5a2c'; for (const P of tr) { g.beginPath(); polyPath(g, P); g.fill(); }
+    g.fillStyle = '#5a3a22'; g.fillRect(189, 186, 12, 26);
+    const S = styles([['#2a3e1c', 1.8, 0.6]], 2);
+    hatch(rng, { x0: 110, y0: 30, x1: 280, y1: 210 }, { angle: -0.9, gap: 3.4, lenMin: 6, lenMax: 12 }, (x, y) => (tr.some(P => inPoly(P, x, y)) ? S[0] : null));
+    drawStyles(g, S);
+    g.fillStyle = '#2a1d14'; g.font = `24px ${SERIF_SC}`; g.textAlign = 'center'; g.fillText('AN APPEAL TO HEAVEN', 195, 240);
   } else if (kind === 'red') {
     // The British red ensign: a red field with the Union in the canton.
     const cw = w * 0.46, ch = h * 0.5;
@@ -1791,7 +1801,7 @@ function makeField(lines, box, step) {
 
 // Shared sprites: smoke puffs, flags, the caption card.
 const PUFFS = [0, 1, 2, 3].map(k => new BoilLayer({ name: 'puff' + k, box: { x0: -128, y0: -128, x1: 128, y1: 128 }, res: 0.7, seed: 300 + k, pinned: true, build: function* (g, rng) { yield* puffBuild(g, rng, k); } }));
-const FLAGS = Object.fromEntries(['us', 'union', 'fr', 'red'].map((k, i) => [k, new BoilLayer({ name: 'flag-' + k, box: { x0: 0, y0: 0, x1: FLAG_W, y1: FLAG_H }, res: 1, seed: 310 + i, pinned: true, build: function* (g, rng) { yield* flagBuild(g, rng, k); } })]));
+const FLAGS = Object.fromEntries(['us', 'union', 'fr', 'red', 'pine'].map((k, i) => [k, new BoilLayer({ name: 'flag-' + k, box: { x0: 0, y0: 0, x1: FLAG_W, y1: FLAG_H }, res: 1, seed: 310 + i, pinned: true, build: function* (g, rng) { yield* flagBuild(g, rng, k); } })]));
 const CARD = new BoilLayer({
   name: 'card', box: { x0: 0, y0: 0, x1: 960, y1: 300 }, res: 1, seed: 320, pinned: true,
   build: function* (g, rng) {
@@ -4032,6 +4042,253 @@ SCORE.bunker = (K, { B, b, s, dur, mel }) => {
   roll(B(34.5), s.end - 0.05, 0.08, 0.4, 0.05);
 };
 
+/* =================== scene 12 — Washington takes command, 1775 ================ */
+// Cambridge Common: under a great elm, Washington rides in on a white horse, draws his
+// sword and takes command of a ragged army of farmers, woodsmen and townsmen.
+const CMD = (() => {
+  const s0 = sceneById.command.start, B = beatOf('command'), T = { halt: cue('command', 'halt'), sword: cue('command', 'sword'), cheer: cue('command', 'cheer') };
+  const Tw = 4 * beatLen('command'), v = HGAIT.walk.S / Tw;                  // a stride every four beats
+  const troops = [[700, 'militiaA'], [766, 'rifleman'], [832, 'colonistB'], [898, 'militiaC'], [964, 'colonistA'], [1030, 'militiaB']].map(([x, o], i) => ({ x, y: 1470 + (i % 2) * 18, s: 1.5, outfit: o, seed: 230 + i, j: rand3(i, 8, 8) * 0.3 }));
+  return { s0, B, T, v, troops, stopX: 214, s: 1.55, ground: 1530 };
+})();
+function* buildCambridge(g, rng) {
+  const hz = 1080;
+  yield* pencilG(g, rng, { x0: -40, y0: -40, x1: 1120, y1: hz + 6 }, () => true, (x, y) => clamp(0.4 + 0.5 * (y / hz) + 0.1 * fbm(x * 0.003, y * 0.008, 121)), ['#7c98b4', '#90aac2', '#a8bece', '#c2d0d6', '#dcdfd6', '#efeade'],
+    { flow: FLOW.noise(0.04, 0.2, 0.002, 121), curve: 0.4, gap: 4.6, len: [24, 50], crossOff: 0.5, crossAmt: 0.3, washAlpha: 0.36 });
+  const cl = styles([['#f6f1e4', 2.8, 0.65], ['#c9cdd2', 2.4, 0.45]], 4);
+  hatch(rng, { x0: 300, y0: 100, x1: 1120, y1: 760 }, { angle: 0, flow: FLOW.around(760, 520, 1.8), curve: 0.7, gap: 5, lenMin: 16, lenMax: 36 }, (x, y, r) => { const v = fbm(x * 0.005, y * 0.01, 122) + 0.3 * Math.exp(-Math.hypot(x - 760, (y - 480) * 1.8) / 180); return v > 0.36 && r() < 0.8 ? cl[v > 0.5 ? 0 : 1] : null; });
+  yield* drawStylesG(g, cl);
+  // Massachusetts Hall across the Common: red brick, white trim, a cupola.
+  const hall = [[640, hz + 10], [640, 880], [1060, 880], [1060, hz + 10]], roof = [[626, 884], [668, 830], [1032, 830], [1074, 884]];
+  yield* pencilG(g, rng, bboxOf(hall), (x, y) => inPoly(hall, x, y), (x, y) => clamp(0.45 + 0.1 * Math.sin(y * 0.5) + 0.1 * fbm(x * 0.03, y * 0.03, 123)), ['#5a2a1e', '#743628', '#8e4630', '#a85a3e'], { flow: () => 0, curve: 0.05, gap: 2.6, len: [10, 22], crossAngle: 1.57, crossAmt: 0.4 });
+  yield* pencilG(g, rng, bboxOf(roof), (x, y) => inPoly(roof, x, y), (x) => clamp(0.3 + (x - 640) / 900), ['#34302e', '#48423e', '#5e5650'], { angle: 0, wander: 0.1, gap: 2.4, len: [12, 22], cross: false });
+  for (let r2 = 0; r2 < 3; r2++) for (let k = 0; k < 8; k++) { const x = 668 + k * 49, y = 900 + r2 * 60; g.fillStyle = '#2a2c34'; g.fillRect(x, y, 22, 34); g.strokeStyle = '#efe9dc'; g.lineWidth = 2.4; g.strokeRect(x, y, 22, 34); }
+  g.fillStyle = '#efe9dc'; g.fillRect(830, 790, 40, 42); g.beginPath(); g.moveTo(824, 792); g.lineTo(850, 760); g.lineTo(876, 792); g.fill();
+  for (const P of [hall, roof]) sketchLine(g, P.concat([P[0]]), rng, 0.8, '#23160e', 1.8, 0.85);
+  // The Common: summer grass, a rail fence, worn paths.
+  yield* pencilG(g, rng, { x0: -40, y0: hz - 10, x1: 1120, y1: 1960 }, (x, y) => y > hz, (x, y) => clamp(0.66 + 0.14 * fbm(x * 0.006, y * 0.01, 124) - 0.28 * smooth(clamp((y - 1300) / 600)) + (Math.abs(y - 1560 - 0.05 * x) < 40 ? 0.14 : 0)), GRASS, { flow: FLOW.noise(-1.4, 0.45, 0.01, 124), curve: 0.55, gap: 3.8, len: [9, 18], crossOff: 0.9, crossAmt: 0.5 });
+  g.strokeStyle = '#6a5438'; g.lineWidth = 3; g.beginPath(); for (let x = 420; x < 1120; x += 60) { g.moveTo(x, hz + 60); g.lineTo(x, hz + 20); } g.moveTo(420, hz + 30); g.lineTo(1120, hz + 30); g.moveTo(420, hz + 48); g.lineTo(1120, hz + 48); g.stroke();
+  yield;
+  // The great elm: a massive trunk and a canopy spreading over the left.
+  const trunk = [[120, 1560], [230, 1560], [214, 1120], [260, 900], [300, 760], [270, 750], [220, 860], [190, 800], [160, 700], [130, 712], [168, 870], [140, 1120]];
+  yield* pencilG(g, rng, bboxOf(trunk), (x, y) => inPoly(trunk, x, y), (x, y) => clamp(0.25 + 0.4 * (x - 130) / 110 + 0.1 * fbm(x * 0.03, y * 0.02, 125)), ['#241a14', '#34281e', '#4a3a2c', '#62503e', '#7c6850'], { flow: (x, y) => -1.57 + 0.3 * Math.sin(y * 0.01) + (y < 900 ? 0.4 * (x - 200) / 80 : 0), curve: 0.4, gap: 2.8, len: [14, 30], crossAmt: 0.6 });
+  sketchLine(g, trunk.concat([trunk[0]]), rng, 1, '#170f0a', 2.4, 0.9);
+  const inC = (x, y) => { for (const [cx, cy, R] of [[180, 520, 330], [420, 470, 250], [40, 760, 230], [330, 700, 220]]) if (Math.hypot(x - cx, (y - cy) * 1.25) < R * (0.84 + 0.16 * vnoise(Math.atan2(y - cy, x - cx) * 4, cx))) return true; return false; };
+  yield* pencilG(g, rng, { x0: -40, y0: 180, x1: 680, y1: 960 }, inC, (x, y) => clamp(0.55 - (y - 500) / 700 + 0.2 * fbm(x * 0.012, y * 0.012, 126)), ['#2c3e22', '#3e5430', '#566e3c', '#708a4c', '#8ca262'], { flow: FLOW.wobble(FLOW.around(220, 560, 1.25), 0.8, 0.02, 126), curve: 0.7, gap: 4.4, len: [7, 13], density: 0.82 });
+  yield* scribbleG(g, rng, { x0: -40, y0: 180, x1: 680, y1: 960 }, inC, (x, y) => clamp(0.5 - (y - 500) / 700 + 0.2 * fbm(x * 0.012, y * 0.012, 126)), ['#233318', '#34482a', '#4a6034', '#627a42'], { cell: 13, step: 4.5, loops: 9, width: 1.8, alpha: 0.72 });
+}
+const CMD_LAYER = new BoilLayer({ name: 'cambridge', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.62, seed: 2101, build: buildCambridge });
+function drawCommand(g, t, lt, tick) {
+  const C = CMD, T = C.T, L = LIGHTS.day;
+  CMD_LAYER.draw(g, tick);
+  // The pine-tree flag held by a colour-bearer.
+  const fb = { x: 606, y: 1496, s: 1.5 }, pb = [-10, -20], pt = [-60, -420];
+  const W2 = p => [fb.x - p[0] * fb.s, fb.y + p[1] * fb.s], top = W2(pt), bot = W2(pb);
+  g.strokeStyle = lit('#6a4a2a', L); g.lineWidth = 8; g.beginPath(); g.moveTo(bot[0], bot[1]); g.lineTo(top[0], top[1]); g.stroke();
+  const fp = basePose(); fp.nh = lerp2(pb, pt, 0.3); fp.fh = lerp2(pb, pt, 0.44); fp.ne = [-0.4, 1]; fp.fe = [-1, 0.2];
+  drawFigure(g, { x: fb.x, y: fb.y, s: fb.s, dir: -1, outfit: 'continental', seed: 236, light: L }, fp, tick);
+  drawFlag(g, FLAGS.pine, tick, top[0], top[1] + 4, 240, 158, lt, { dir: 1, amp: 12, waves: 1.3, speed: 1.1 });
+  // The troops: shoulder arms, present arms, then hats in the air.
+  C.troops.forEach(m => {
+    let P = carry(basePose(), 'shoulder', { bayonet: false });
+    const pr = smooth(invLerp(T.sword + 0.5 + m.j, T.sword + 0.9 + m.j, t)), ch = smooth(invLerp(T.cheer + m.j, T.cheer + 0.3 + m.j, t));
+    if (pr > 0) P = mixPose(P, carry(basePose(), 'ready', { bayonet: false }), pr);
+    if (ch > 0) { P = carry(basePose(), 'order', { bayonet: false }); P.fh = lerp2(armAt(P, true, 0), [22, -238 + 8 * Math.sin(t * 7 + m.j * 9)], ch); P.fe = [0.3, 1]; }
+    const out = drawFigure(g, { x: m.x, y: m.y, s: m.s, dir: -1, outfit: m.outfit, seed: m.seed, light: L, hideHat: ch > 0.5 }, P, tick);
+    if (ch > 0.5) { g.fillStyle = '#26221e'; g.beginPath(); g.ellipse(out.farHand[0], out.farHand[1] - 16, 22, 9, 0.2, 0, TAU); g.fill(); g.fillRect(out.farHand[0] - 11, out.farHand[1] - 34, 22, 18); }
+  });
+  // Washington rides in, halts under the elm and raises his sword.
+  const d = t < T.halt ? (t - T.halt) * C.v : 0, x = C.stopX + d * C.s;
+  const HP = t < T.halt ? horsePose('walk', d + 400) : horsePose('stand');
+  if (t >= T.halt) { const w = smooth(invLerp(T.halt, T.halt + 0.6, t)); const W0 = horsePose('walk', 400); for (const k of ['fn', 'ff', 'hn', 'hf']) HP[k] = lerp2(W0[k], HP[k], w).concat([0]); }
+  const H = { x, y: C.ground, s: C.s, dir: 1, seed: 2102, light: L, coat: '#dcd6c8', dark: '#9c948a', mane: '#c8c0b0', cloth: '#2e4676', stock: '#cfc8ba' };
+  const att = drawHorse(g, H, HP, tick);
+  const up = smooth(invLerp(T.sword - 0.4, T.sword + 0.2, t));
+  drawRider(g, att, { s: C.s, dir: 1, outfit: 'washington', seed: 2103, light: L, flutter: 0.3 }, {
+    lean: 0.04, head: -0.06 - 0.06 * up, reins: up < 0.5,
+    pose: P => { if (up > 0) { const sh = shoulderOf(P, false); P.nh = lerp2(P.nh, [sh[0] + 18, sh[1] - 60], up); P.ne = [0.3, 1]; P.sword = { ang: lerp(1.2, -1.35, up) }; } return P; },
+  }, tick);
+}
+function camCommand(lt) { const u = smooth(clamp(lt / durOf('command'))); return { z: lerp(1.04, 1.12, u), x: lerp(520, 470, u), y: lerp(1060, 1120, u), rot: 0 }; }
+SCN.command = { layers: [CMD_LAYER, FLAGS.pine], draw: drawCommand, cam: camCommand };
+// A drum roll, the opening tune now in a bright major for the new army, a brass fanfare as
+// the sword comes up, and a cheer.
+SCORE.command = (K, { B, b, s, dur, mel }) => {
+  const { N, one, pz, glock, bell, sn, flam, roll, bd, str, strH, brass } = K, T = CMD.T;
+  roll(B(0) + 0.05, B(2) - 0.05, 0.1, 0.5, b / 8);
+  for (let k = 0; ; k++) { const t = T.halt - (k + 1) * 2 * beatLen('command'); if (t < s.start + 0.2) break; one(t, time => N.hoof(time, 0.35)); one(t + beatLen('command'), time => N.hoof(time, 0.3)); }
+  mel([[2, 'A4', 0.5], [2.5, 'D5', 0.5], [3, 'F#5', 0.5], [3.5, 'A5', 0.5], [4, 'G5', 0.5], [4.5, 'F#5', 0.5], [5, 'E5', 0.5], [5.5, 'D5', 0.5], [6, 'E5', 0.5], [6.5, 'F#5', 0.5], [7, 'G5', 0.5], [7.5, 'E5', 0.5], [8, 'F#5', 1], [9, 'D5', 1]], 0.56);
+  for (let bb = 2; bb < 11; bb++) { if (bb % 2 === 0) { flam(B(bb), 0.5); bd(B(bb), 0.5); } else sn(B(bb), 0.4); sn(B(bb + 0.5), 0.2); }
+  [['D3', 'A2'], ['G2', 'D3'], ['A2', 'E3'], ['D3', 'A2']].forEach(([r, f], k) => { pz(B(2 + 2 * k), r, 0.65); pz(B(3 + 2 * k), f, 0.5); });
+  roll(T.halt + 0.2, T.sword - 0.05, 0.05, 0.6, 0.042);
+  for (const [bb, n, d] of [[14, ['D4', 'A4'], 0.5], [14.5, ['D4', 'A4'], 0.5], [15, ['F#4', 'D5'], 1], [16, ['A4', 'F#5'], 1.5], [17.5, ['G4', 'E5'], 0.5], [18, ['A4', 'F#5'], 2]]) brass(B(bb), d * b * 0.95, n, 0.62);
+  bd(T.sword, 0.9); bell(T.sword, 'D4', 0.4, 3);
+  strH(B(14), B(20) - B(14), ['D3', 'A3', 'F#4'], 0.34);
+  one(T.cheer, time => N.cheer(time, 0.7, 1.6)); one(T.cheer + 0.9, time => N.cheer(time, 0.5, 1.2));
+  mel([[20, 'D5', 0.5], [20.5, 'E5', 0.5], [21, 'F#5', 0.5], [21.5, 'G5', 0.5], [22, 'A5', 1], [23, 'F#5', 1], [24, 'B5', 1], [25, 'A5', 0.5], [25.5, 'G5', 0.5], [26, 'F#5', 1], [27, 'E5', 1], [28, 'D5', 2]], 0.58);
+  for (let bb = 20; bb < 28; bb++) { if (bb % 2 === 0) { flam(B(bb), 0.55); bd(B(bb), 0.55); } else sn(B(bb), 0.42); sn(B(bb + 0.5), 0.22); }
+  for (const [bb, n] of [[20, ['D3', 'F#3', 'A3']], [22, ['D3', 'F#3', 'A3']], [24, ['G2', 'D3', 'B3']], [26, ['A2', 'E3', 'C#4']]]) str(B(bb), 2 * b + 0.1, n, 0.36);
+  strH(B(28), s.end - B(28) + 0.3, ['D3', 'A3', 'D4', 'F#4'], 0.4);
+  ['D6', 'F#6', 'A6'].forEach((n, k) => glock(B(28) + k * 0.12, n, 0.3, 1.5));
+};
+
+/* ======================== scene 13 — Common Sense, 1776 ======================= */
+// A Philadelphia print shop: the pressman pulls the bar, the inker beats the type; the
+// sheet comes off the press: COMMON SENSE. Then copies fly out in their thousands.
+const PAI = (() => {
+  const s0 = sceneById.paine.start, B = beatOf('paine'), T = { lift: cue('paine', 'lift'), page: cue('paine', 'page'), copies: cue('paine', 'copies') };
+  return { s0, B, T, pull: 4 * beatLen('paine'), floor: 1640 };
+})();
+const PRESS_LIGHT = { tint: '#f0c890', amt: 0.1, dark: 0.04, ink: '#23160e', dir: [0.7, -0.7] };
+function* buildPrintShop(g, rng) {
+  const box = { x0: -40, y0: -40, x1: 1120, y1: 1960 }, fl = PAI.floor;
+  // Brick walls, whitewashed and worn.
+  const brick = (x, y) => { const row = Math.floor(y / 26), off = row % 2 ? 30 : 0; return [Math.floor((x + off) / 60), row]; };
+  yield* pencilG(g, rng, box, (x, y) => y < fl - 380, (x, y) => { const [i, j] = brick(x, y), mx = (x + (j % 2 ? 30 : 0)) % 60, my = y % 26; return mx < 3 || my < 3 ? 0.85 : clamp(0.5 + 0.25 * rand3(i, j, 4) + 0.15 * fbm(x * 0.004, y * 0.004, 131)); },
+    ['#6a3a28', '#84503a', '#9c6a50', '#b48a6c', '#cfb08e', '#e2d0b4'], { flow: (x, y) => { const [i, j] = brick(x, y); return (rand3(i, j, 8) - 0.5) * 1.2; }, curve: 0.3, gap: 3.4, len: [8, 16], crossAmt: 0.45, washAlpha: 0.4 });
+  // Plank floor.
+  yield* pencilG(g, rng, { x0: -40, y0: fl - 400, x1: 1120, y1: 1960 }, (x, y) => y > fl - 384, (x, y) => clamp(0.5 + 0.12 * Math.sin(Math.floor((y - fl + 384) / 34) * 2.2) + 0.1 * fbm(x * 0.005, y * 0.05, 132) - ((y - fl + 384) % 34 < 2.5 ? 0.3 : 0)), ['#3e2a1a', '#523822', '#684a2e', '#7e5c3a', '#94704a'], { flow: FLOW.noise(0.0, 0.05, 0.004, 132), curve: 0.1, gap: 3, len: [40, 80], jitter: 0.04, crossAngle: 1.4, crossAmt: 0.4 });
+  sketchLine(g, [[-40, fl - 384], [1120, fl - 384]], rng, 1, '#1f1208', 2.4, 0.9);
+  yield;
+  // Type case on its stand, left.
+  const tc = [[40, 1000], [330, 960], [330, 1110], [40, 1150]];
+  yield* pencilG(g, rng, bboxOf(tc), (x, y) => inPoly(tc, x, y), () => 0.55, ['#4a3220', '#634630', '#7c5e40', '#957850'], { flow: () => -0.14, curve: 0.1, gap: 2.6, len: [16, 30], cross: false });
+  g.strokeStyle = '#2a1a0e'; g.lineWidth = 1.6; g.beginPath();
+  for (let k = 1; k < 10; k++) { const x = 40 + k * 29; g.moveTo(x, 1000 - k * 4); g.lineTo(x, 1150 - k * 4); }
+  for (let k = 1; k < 6; k++) { const y = 1000 + k * 25; g.moveTo(40, y); g.lineTo(330, y - 40); }
+  g.stroke();
+  for (const [a, b2] of [[[60, 1140], [50, 1580]], [[310, 1110], [320, 1580]]]) { g.strokeStyle = '#4a3220'; g.lineWidth = 14; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b2[0], b2[1]); g.stroke(); }
+  sketchLine(g, tc.concat([tc[0]]), rng, 0.8, '#1f1208', 2, 0.9);
+  // The common press: two cheeks, the head, the winter and the carriage, about a man's height.
+  const wood = ['#3a2414', '#553620', '#704a2c', '#8c6240', '#a67a54'];
+  for (const P of [[[486, fl], [486, 1070], [528, 1070], [528, fl]], [[752, fl], [752, 1070], [794, 1070], [794, fl]], [[460, 1070], [820, 1070], [820, 1128], [460, 1128]], [[460, 1330], [820, 1330], [820, 1356], [460, 1356]], [[460, 1520], [820, 1520], [820, 1544], [460, 1544]]]) {
+    yield* pencilG(g, rng, bboxOf(P), (x, y) => inPoly(P, x, y), (x, y) => clamp(0.35 + 0.35 * (((x - P[0][0]) / 50) % 1) + 0.1 * fbm(x * 0.03, y * 0.03, 133)), wood, { flow: () => (P[1][1] - P[0][1] < -300 ? -1.57 : 0), curve: 0.1, gap: 2.6, len: [16, 34], crossAmt: 0.5 });
+    sketchLine(g, P.concat([P[0]]), rng, 0.8, '#1f1208', 2.2, 0.9);
+  }
+  // The ribs and the carriage running out to the right.
+  g.fillStyle = '#4a3220'; g.fillRect(430, 1394, 620, 18); sketchLine(g, [[430, 1394], [1050, 1394], [1050, 1412], [430, 1412]], rng, 0.6, '#1f1208', 1.8, 0.9, true);
+  g.fillStyle = '#5a4030'; g.fillRect(1030, 1408, 16, fl - 1408);
+  yield;
+  // Drying lines with printed sheets hanging from them.
+  for (const [y0, n] of [[250, 7], [470, 6]]) {
+    sketchLine(g, [[-40, y0], [1120, y0 + 20]], rng, 0.5, '#3a2a1c', 2, 0.9);
+    for (let k = 0; k < n; k++) {
+      const x = 60 + k * (1000 / n) + 30 * rng(), y = y0 + (x + 40) / 1160 * 20, w = 96 + 20 * rng(), h = 130 + 20 * rng();
+      const P = [[x, y], [x + w, y + 3], [x + w + 4, y + h], [x + 2, y + h - 4]];
+      g.fillStyle = '#ece4d0'; g.beginPath(); polyPath(g, P); g.fill();
+      g.strokeStyle = 'rgba(60,40,24,0.55)'; g.lineWidth = 1.2; g.beginPath(); for (let yy = y + 20; yy < y + h - 12; yy += 9) { g.moveTo(x + 12, yy); g.lineTo(x + w - 10 - 20 * rng(), yy); } g.stroke();
+      g.fillStyle = '#2a1d14'; g.fillRect(x + 14, y + 12, w * 0.6, 5);
+      sketchLine(g, P.concat([P[0]]), rng, 0.6, '#5a4632', 1.4, 0.8);
+      g.fillStyle = '#6a5438'; g.fillRect(x + w / 2 - 4, y - 5, 8, 12);
+    }
+  }
+}
+// The title page of the first edition.
+function* buildTitlePage(g, rng) {
+  const w = 720, h = 1040;
+  g.fillStyle = '#ece3cc'; g.fillRect(0, 0, w, h);
+  yield* pencilG(g, rng, { x0: 0, y0: 0, x1: w, y1: h }, () => true, (x, y) => clamp(0.8 + 0.08 * fbm(x * 0.006, y * 0.006, 7) - 0.3 * Math.exp(-Math.min(x, w - x, y, h - y) / 30)), ['#b9a984', '#cfc2a0', '#ded4b8', '#e9e1ca', '#f2ecdb'], { flow: FLOW.noise(-1.2, 0.6, 0.004, 7), curve: 0.3, gap: 4.8, len: [12, 22], crossAmt: 0.25, washAlpha: 0.25 });
+  const INK = '#1e140c', cx = w / 2; let y = 108;
+  g.fillStyle = INK; g.textAlign = 'center';
+  const line = (txt, font, dy, sp = 0) => { g.font = font; y += dy; if (sp) spacedText(g, txt, cx, y, sp); else g.fillText(txt, cx, y); };
+  const rule = dy => { y += dy; g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - 240, y); g.lineTo(cx + 240, y); g.moveTo(cx - 240, y + 5); g.lineTo(cx + 240, y + 5); g.stroke(); };
+  line('COMMON SENSE;', `86px ${SERIF}`, 0, 2);
+  rule(34);
+  line('ADDRESSED TO THE', `34px ${SERIF_SC}`, 58, 5);
+  line('INHABITANTS', `64px ${SERIF_SC}`, 78, 8);
+  line('OF', `30px ${SERIF_SC}`, 50);
+  line('AMERICA,', `80px ${SERIF_SC}`, 86, 6);
+  line('On the following interesting', `italic 30px ${SERIF}`, 58);
+  line('SUBJECTS.', `40px ${SERIF_SC}`, 50, 4);
+  rule(26);
+  g.font = `italic 22px ${SERIF}`; g.textAlign = 'left';
+  for (const t of ['I. Of the Origin and Design of Government in general, with concise Remarks on the English Constitution.', 'II. Of Monarchy and Hereditary Succession.', 'III. Thoughts on the present State of American Affairs.', 'IV. Of the present Ability of America, with some miscellaneous Reflections.']) {
+    wrapText(g, t, 540).forEach((l, i) => { y += 30; g.fillText(l, 90 + (i ? 26 : 0), y); }); y += 4;
+  }
+  g.textAlign = 'center';
+  rule(20);
+  line('Man knows no Master save creating Heaven,', `italic 22px ${SERIF}`, 40); line('Or those whom choice and common good ordain.', `italic 22px ${SERIF}`, 28);
+  line('Thomson.', `20px ${SERIF_SC}`, 28);
+  rule(18);
+  line('PHILADELPHIA;', `36px ${SERIF_SC}`, 54, 3);
+  line('Printed, and Sold, by R. BELL, in Third-Street.', `italic 24px ${SERIF}`, 38);
+  line('MDCCLXXVI.', `32px ${SERIF_SC}`, 44, 4);
+  sketchLine(g, [[0, 0], [w, 0], [w, h], [0, h]], rng, 1, '#6a5438', 2.4, 0.9, true);
+}
+const PAI_LAYERS = {
+  shop: new BoilLayer({ name: 'printShop', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.62, seed: 2201, build: buildPrintShop }),
+  page: new BoilLayer({ name: 'titlePage', box: { x0: 0, y0: 0, x1: 720, y1: 1040 }, res: 1, seed: 2202, passes: 2, build: buildTitlePage }),
+};
+function drawPaine(g, t, lt, tick) {
+  const P0 = PAI, T = P0.T, L = PRESS_LIGHT, fl = P0.floor;
+  PAI_LAYERS.shop.draw(g, tick);
+  // Window light from the left.
+  g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createLinearGradient(0, 0, 900, 900); gr.addColorStop(0, 'rgba(255,230,180,0.2)'); gr.addColorStop(1, 'rgba(255,230,180,0)'); g.fillStyle = gr; g.fillRect(-40, -40, 1160, 2000); g.restore();
+  // Each pull: the bar comes over, the platen goes down on the forme, and back.
+  const c = ((t - P0.s0) / P0.pull) % 1, press = Math.sin(Math.PI * clamp((c - 0.15) / 0.4)), lifted = t > T.lift, rng = mulberry32(hash3(tick, 2203));
+  const py = 1290 + 22 * press;
+  g.fillStyle = lit('#9a9ea2', L); g.fillRect(632, 1128, 16, py - 1128); g.fillStyle = lit('#5a4030', L); g.fillRect(570, py, 140, 24);
+  sketchLine(g, [[570, py], [710, py], [710, py + 24], [570, py + 24]], rng, 0.6, L.ink, 1.8, 0.9, true);
+  // The tympan with the sheet on the carriage; after the last pull the sheet lifts free.
+  const sheet = lifted ? smooth(invLerp(T.lift, T.lift + 0.8, t)) : 0;
+  g.fillStyle = '#efe7d2'; g.save(); g.translate(570, 1388); g.rotate(-sheet * 1.2); g.fillRect(0, -8, 180, 10 + 50 * sheet); g.restore();
+  // The pressman pulls the bar; the inker beats the type with his ink balls.
+  const pr = basePose(); pr.lean = 0.1 + 0.22 * press; pr.nf = [20, -FIG.ankle]; pr.ff = [-28, -FIG.ankle];
+  const F = { x: 912, y: fl, s: 2.45, dir: -1, outfit: 'printer', seed: 2204, light: L }, loc = w => [(w[0] - F.x) / (F.dir * F.s), (w[1] - F.y) / F.s];
+  const barEnd = [lerp(790, 846, press), lerp(1246, 1286, press)];
+  pr.nh = loc(barEnd); pr.fh = loc([barEnd[0] + 12, barEnd[1] + 8]); pr.ne = pr.fe = [-0.5, 1];
+  g.strokeStyle = lit('#3a3a3e', L); g.lineWidth = 8; g.lineCap = 'round'; g.beginPath(); g.moveTo(646, 1230); g.lineTo(barEnd[0], barEnd[1]); g.stroke();
+  drawFigure(g, F, pr, tick);
+  const ik = basePose(), dab = Math.abs(Math.sin((t - P0.s0) * 5)); ik.lean = 0.2; ik.nf = [14, -FIG.ankle]; ik.ff = [-16, -FIG.ankle];
+  const G = { x: 360, y: fl - 6, s: 2.35, dir: 1, outfit: 'colonistC', seed: 2205, light: L }, loc2 = w => [(w[0] - G.x) / (G.dir * G.s), (w[1] - G.y) / G.s];
+  const b1 = [470, 1330 - 26 * dab], b2 = [520, 1330 - 26 * (1 - dab)];
+  ik.nh = loc2(b1); ik.fh = loc2(b2); ik.ne = ik.fe = [-0.8, 1];
+  drawFigure(g, G, ik, tick);
+  for (const b of [b1, b2]) { g.fillStyle = lit('#2a2420', L); g.beginPath(); g.ellipse(b[0], b[1] + 22, 30, 15, 0, 0, TAU); g.fill(); g.fillStyle = lit('#6a4a2a', L); g.fillRect(b[0] - 6, b[1] - 18, 12, 30); }
+}
+function drawPaineOver(g, t, tick) {
+  const T = PAI.T;
+  const up = easeOut3(invLerp(T.page, T.page + 1.2, t)), out = smooth(invLerp(T.copies - 0.4, T.copies + 0.6, t));
+  if (up > 0) {
+    // The page rises to fill the frame, then shrinks and sends copies flying out.
+    const sc = lerp(0.2, 1.24, up) * (1 - 0.8 * out), cx = lerp(660, 540, up), cy = lerp(1230, 900, up) - 200 * out;
+    g.save(); g.shadowColor = 'rgba(30,15,5,0.4)'; g.shadowBlur = 30; g.shadowOffsetY = 12;
+    g.fillStyle = '#ece3cc'; g.fillRect(cx - 360 * sc, cy - 520 * sc, 720 * sc, 1040 * sc); g.restore();
+    PAI_LAYERS.page.drawAt(g, tick, cx - 360 * sc, cy - 520 * sc, sc, lerp(0.2, -0.02, up), 1);
+  }
+  if (out > 0) {
+    const a = t - T.copies;
+    for (let k = 0; k < 44; k++) {
+      const r = mulberry32(hash3(k, 222)), ang = r() * TAU, sp = 260 + 420 * r(), at = r() * 2.4, q = a - at;
+      if (q < 0) continue;
+      const d = sp * q, x = 540 + Math.cos(ang) * d + 60 * Math.sin(q * 3 + k), y = 700 + Math.sin(ang) * d * 0.9 + 40 * q * q, sc = 0.13 + 0.05 * r();
+      if (x < -120 || x > 1200 || y < -160 || y > 2080) continue;
+      PAI_LAYERS.page.drawAt(g, tick, x - 360 * sc, y - 520 * sc, sc, (r() - 0.5) * 2 + q * (r() - 0.5) * 3, 1);
+    }
+    drawRibbon(g, tick, 540, 1470, easeOut3(invLerp(T.copies + 1, T.copies + 2, t)), 'Over 100,000 copies', `italic 50px ${SERIF}`, { seed: 223, w: 320, dip: 20 });
+  }
+}
+function camPaine(lt) { const u = smooth(clamp(lt / durOf('paine'))); return { z: lerp(1.08, 1.14, u), x: lerp(620, 600, u), y: lerp(1150, 1180, u), rot: 0 }; }
+SCN.paine = { layers: [PAI_LAYERS.shop, PAI_LAYERS.page], draw: drawPaine, cam: camPaine, over: drawPaineOver };
+// The press as a rhythm section (thump and clack); a jaunty tune; a bell for the title page,
+// and glittering runs as the copies fly.
+SCORE.paine = (K, { B, b, s, dur, mel }) => {
+  const { N, one, pz, glock, bell, sn, roll, bd, str, strH, brass } = K, T = PAI.T;
+  for (let t = s.start; t < T.lift; t += PAI.pull) { one(t + PAI.pull * 0.34, time => N.thunk(time)); one(t + PAI.pull * 0.6, time => N.clatter(time, 0.4)); }
+  for (let k = 0; k < 13; k++) one(B(k + 0.5), time => N.click(time, 0.22));
+  const bass = ['G2', 'D3', 'B2', 'D3', 'C3', 'E3', 'D3', 'F#3'];
+  for (let k = 0; k < 28; k++) pz(B(k * 0.5), bass[k % 8], k % 2 ? 0.4 : 0.58, 0.2);
+  mel([[1, 'D5', 0.5], [1.5, 'B4', 0.5], [2, 'G4', 0.5], [2.5, 'B4', 0.5], [3, 'D5', 1], [4, 'E5', 0.5], [4.5, 'F#5', 0.5], [5, 'G5', 1], [6, 'F#5', 0.5], [6.5, 'E5', 0.5], [7, 'D5', 1], [8, 'C5', 0.5], [8.5, 'B4', 0.5], [9, 'A4', 1], [10, 'B4', 0.5], [10.5, 'C5', 0.5], [11, 'D5', 1], [12, 'G4', 1]], 0.52);
+  bell(T.page, 'G3', 0.6, 4); bd(T.page, 0.6);
+  for (const [bb, d, n] of [[15, 2, ['G2', 'D3', 'G3', 'B3']], [17, 2, ['C3', 'G3', 'C4', 'E4']], [19, 3, ['D3', 'A3', 'D4', 'F#4']]]) str(B(bb), d * b + 0.1, n, 0.42);
+  for (const [bb, n, d] of [[15, 'D5', 1], [16, 'G5', 1], [17, 'E5', 1], [18, 'C5', 1], [19, 'D5', 2], [21, 'F#5', 1]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.5);
+  roll(T.copies - 0.8, T.copies - 0.03, 0.05, 0.5, 0.04);
+  for (let k = 0; k < 24; k++) glock(T.copies + k * 0.12, ['G5', 'B5', 'D6', 'G6', 'D6', 'B5'][k % 6], 0.26 - k * 0.006, 0.8);
+  mel([[22, 'G5', 0.5], [22.5, 'A5', 0.5], [23, 'B5', 1], [24, 'A5', 0.5], [24.5, 'G5', 0.5], [25, 'F#5', 1], [26, 'E5', 0.5], [26.5, 'F#5', 0.5], [27, 'G5', 1], [28, 'D5', 1], [29, 'G5', 1]], 0.56);
+  for (let bb = 22; bb < 29; bb++) { sn(B(bb), 0.34); sn(B(bb + 0.5), 0.2); if (bb % 2 === 0) bd(B(bb), 0.45); }
+  strH(B(22), s.end - B(22) + 0.3, ['G2', 'D3', 'B3', 'G4'], 0.36);
+};
+
 /* =============== scene 4 — the Declaration of Independence, 1776 ============ */
 const PARCH = (() => {
   const P = [], r = mulberry32(404);
@@ -4170,6 +4427,251 @@ function camDeclaration(lt) {
   const z = track([[0, 1.0], [c('truths'), 1.035], [c('more'), 1.035], [c('sign') + 0.2, 1.0], [dur, 1.02]])(lt);
   return { z, x: 540, y, rot: 0 };
 }
+
+/* ===================== scene 15 — down comes the King, 1776 ==================== */
+// Bowling Green, New York, at sunset. A crowd hauls on ropes until the gilded statue of
+// George III on horseback topples off its pedestal.
+const STA = (() => {
+  const s0 = sceneById.statue.start, B = beatOf('statue'), T = { fall: cue('statue', 'fall') };
+  T.tip = T.fall - 0.9;
+  const pullers = [[96, 'colonistA'], [176, 'sailorA'], [256, 'militiaB'], [336, 'colonistC']].map(([x, o], i) => ({ x, y: 1640 + (i % 2) * 14, s: 1.75, outfit: o, seed: 250 + i, j: i * 0.13 }));
+  const cheer = [[860, 'colonistB', 1.6], [960, 'womanB', 1.55], [1040, 'printer', 1.5]].map(([x, o, s], i) => ({ x, y: 1600 + i * 10, s, outfit: o, seed: 255 + i, j: i * 0.2 }));
+  return { s0, B, T, pullers, cheer, ped: { x0: 420, x1: 700, top: 1150, base: 1470 }, pivot: [420, 1150], hs: 1.55 };
+})();
+const STA_LIGHT = { tint: '#f0a070', amt: 0.16, dark: 0.05, ink: '#2a160e', dir: [0.8, -0.6] };
+function* buildBowlingGreen(g, rng) {
+  const hz = 1180;
+  // Sunset: gold low in the west, rose above, violet overhead.
+  yield* pencilG(g, rng, { x0: -40, y0: -40, x1: 1120, y1: hz + 6 }, () => true, (x, y) => clamp(0.1 + 0.8 * smooth(clamp(y / hz)) + 0.25 * Math.exp(-Math.hypot(x - 1000, y - 1060) / 320) + 0.08 * fbm(x * 0.003, y * 0.008, 141)),
+    ['#3e3a5e', '#5c4a6e', '#8a5a6e', '#bc6e62', '#e08e5c', '#f2b46a', '#f8d894'], { flow: FLOW.mix(FLOW.noise(0.03, 0.2, 0.002, 141), FLOW.radial(1000, 1060), (x, y) => 0.6 * Math.exp(-Math.hypot(x - 1000, y - 1060) / 400)), curve: 0.35, gap: 4.6, len: [24, 50], crossOff: 0.5, crossAmt: 0.35, washAlpha: 0.38 });
+  const cl = styles([['#6a4a6a', 2.8, 0.55], ['#f0a878', 2.4, 0.6]], 4);
+  hatch(rng, { x0: -40, y0: 120, x1: 1120, y1: 900 }, { angle: -0.05, flow: FLOW.noise(-0.06, 0.12, 0.004, 142), curve: 0.4, gap: 5.5, lenMin: 28, lenMax: 64 }, (x, y, r) => { const v = fbm(x * 0.003, y * 0.018, 142); return v > 0.3 && r() < 0.7 ? cl[y > 500 && v > 0.42 ? 1 : 0] : null; });
+  yield* drawStylesG(g, cl);
+  // Houses of lower Broadway, with stepped Dutch gables, and Trinity's steeple.
+  const r = mulberry32(143);
+  for (let x = -40; x < 1120;) {
+    const w = 80 + r() * 70, h = 150 + r() * 110, top = hz - h, steps = r() < 0.5, P = [[x, hz + 10], [x, top]];
+    if (steps) { const sx = w / 6; for (let k = 1; k <= 3; k++) P.push([x + sx * (k - 1) + sx, top - 22 * (k - 1)], [x + sx * k, top - 22 * k]); P.push([x + w - sx * 2, top - 44], [x + w - sx * 2, top - 22], [x + w - sx, top - 22], [x + w - sx, top]); }
+    else P.push([x + w / 2, top - 50]);
+    P.push([x + w, top], [x + w, hz + 10]);
+    yield* pencilG(g, rng, bboxOf(P), (px, py) => inPoly(P, px, py), (px, py) => clamp(0.25 + 0.2 * (px - x) / w + 0.1 * fbm(px * 0.02, py * 0.02, x)), ['#3a2430', '#4e3038', '#643e44', '#7c5050'], { flow: () => -1.57, curve: 0.05, gap: 2.8, len: [14, 28], crossAngle: 0, crossAmt: 0.4 });
+    sketchLine(g, P, rng, 0.8, '#1a0e12', 1.8, 0.85);
+    for (let k = 0; k < 2; k++) if (r() < 0.5) { g.fillStyle = '#f0b060'; g.fillRect(x + w * (0.25 + 0.4 * k), top + 40 + r() * 40, 14, 20); }
+    x += w + 4;
+  }
+  const tr = [[880, hz - 120], [880, hz - 330], [910, hz - 360], [940, hz - 330], [940, hz - 120]], sp = [[884, hz - 356], [910, hz - 560], [936, hz - 356]];
+  for (const P of [tr, sp]) { g.fillStyle = '#3a2430'; g.beginPath(); polyPath(g, P); g.fill(); sketchLine(g, P.concat([P[0]]), rng, 0.6, '#1a0e12', 1.8, 0.85); }
+  yield;
+  // The green, the iron railing, and the marble pedestal.
+  yield* pencilG(g, rng, { x0: -40, y0: hz - 10, x1: 1120, y1: 1960 }, (x, y) => y > hz, (x, y) => clamp(0.6 + 0.14 * fbm(x * 0.006, y * 0.01, 144) - 0.3 * smooth(clamp((y - 1400) / 500))), ['#3a4a2a', '#4e5e34', '#667440', '#808a50', '#a0a066'].map(c => lit(c, STA_LIGHT)), { flow: FLOW.noise(-1.3, 0.5, 0.01, 144), curve: 0.55, gap: 3.8, len: [9, 18], crossOff: 0.9, crossAmt: 0.5 });
+  const P = STA.ped, ped = [[P.x0, P.base], [P.x0, P.top], [P.x1, P.top], [P.x1, P.base]];
+  yield* pencilG(g, rng, bboxOf(ped), (x, y) => inPoly(ped, x, y), (x, y) => clamp(0.55 + 0.35 * (x - P.x0) / (P.x1 - P.x0) + 0.08 * fbm(x * 0.03, y * 0.03, 145)), ['#8a8078', '#a49a90', '#bfb6aa', '#d8d0c4', '#ece6dc'].map(c => lit(c, STA_LIGHT)), { flow: FLOW.wobble(() => -1.5, 0.4, 0.02, 145), curve: 0.4, gap: 2.8, len: [10, 22], crossAmt: 0.4 });
+  for (const [y, h] of [[P.top - 10, 20], [P.base - 16, 22]]) { g.fillStyle = lit('#d8d0c4', STA_LIGHT); g.fillRect(P.x0 - 16, y, P.x1 - P.x0 + 32, h); sketchLine(g, [[P.x0 - 16, y], [P.x1 + 16, y], [P.x1 + 16, y + h], [P.x0 - 16, y + h]], rng, 0.6, '#2a160e', 1.8, 0.9, true); }
+  sketchLine(g, ped.concat([ped[0]]), rng, 0.8, '#2a160e', 2, 0.9);
+  // Railing with crowned posts.
+  g.strokeStyle = '#141014'; g.lineWidth = 4; g.beginPath();
+  for (let x = -20; x < 1120; x += 26) { g.moveTo(x, 1500); g.lineTo(x, 1420); }
+  g.moveTo(-40, 1430); g.lineTo(1120, 1430); g.moveTo(-40, 1490); g.lineTo(1120, 1490); g.stroke();
+  for (let x = 40; x < 1120; x += 260) { g.fillStyle = '#141014'; g.fillRect(x - 6, 1400, 12, 100); g.fillStyle = '#b8923c'; g.beginPath(); g.moveTo(x - 12, 1400); g.lineTo(x - 14, 1382); g.lineTo(x - 5, 1392); g.lineTo(x, 1378); g.lineTo(x + 5, 1392); g.lineTo(x + 14, 1382); g.lineTo(x + 12, 1400); g.fill(); }
+}
+// The statue: the King in Roman dress on his horse, all gilded lead.
+function* buildKingStatue(g, rng) {
+  const H = { x: 0, y: 0, s: STA.hs, dir: 1, seed: 2402, light: { tint: '#f6c870', amt: 0.1, dark: 0, ink: '#3a2408', dir: [0.8, -0.6] }, coat: '#c9a24a', dark: '#a8822e', mane: '#b8923c', stock: '#b8923c', statue: '#d4ae58' };
+  const att = drawHorse(g, H, horsePose('statue'), 3);
+  drawRider(g, att, { s: STA.hs, dir: 1, outfit: 'kingStatue', seed: 2403, light: H.light }, { lean: 0.02, head: -0.08, reins: false, pose: P => { const sh = shoulderOf(P, false); P.nh = [sh[0] + 50, sh[1] + 26]; P.ne = [0.2, 1]; return P; } }, 3);
+  yield;
+  // Gilded glints.
+  g.strokeStyle = 'rgba(255,240,190,0.7)'; g.lineWidth = 2.4; g.beginPath();
+  for (let k = 0; k < 40; k++) { const x = -120 + rng() * 360, y = -470 + rng() * 460; g.moveTo(x, y); g.lineTo(x + 6, y - 6); }
+  g.stroke();
+}
+const STA_LAYERS = {
+  bg: new BoilLayer({ name: 'bowlingGreen', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.62, seed: 2401, build: buildBowlingGreen }),
+  king: new BoilLayer({ name: 'kingStatue', box: { x0: -170, y0: -520, x1: 290, y1: 8 }, res: 0.9, seed: 2404, passes: 2, build: buildKingStatue }),
+};
+// The statue's placement: [pivot x, pivot y, angle] — rocking, tipping, then falling.
+function statuePlace(t) {
+  const T = STA.T, P = STA.pivot;
+  if (t < T.tip) { const rock = 0.035 * Math.max(0, Math.sin((t - STA.s0) * TAU / (2 * beatLen('statue')))) * smooth(invLerp(STA.s0 + 2, T.tip, t)); return [P[0], P[1], -rock]; }
+  if (t < T.fall) { const u = easeIn2(invLerp(T.tip, T.fall, t)); return [lerp(P[0], P[0] + 40, u), lerp(P[1], 1476, u * u), lerp(-0.04, -1.32, u)]; }
+  const a = t - T.fall, b = 0.06 * Math.exp(-a * 8) * Math.sin(a * 30);
+  return [P[0] + 40, 1476, -1.32 + b];
+}
+function drawStatue(g, t, lt, tick) {
+  const S = STA, T = S.T, L = STA_LIGHT;
+  STA_LAYERS.bg.draw(g, tick);
+  const [px, py, ang] = statuePlace(t), attach = p => { const v = rot([p[0] - S.pivot[0], p[1] - S.pivot[1]], ang); return [px + v[0], py + v[1]]; };
+  // The statue stands with its hind feet at the pedestal's left edge: offset so the pivot is there.
+  const base = [S.ped.x0 + 90, S.ped.top];
+  g.save(); g.translate(px, py); g.rotate(ang); g.translate(base[0] - S.pivot[0], base[1] - S.pivot[1]);
+  STA_LAYERS.king.drawAt(g, tick, 0, 0, 1, 0, 1, 1);
+  g.restore();
+  // Dust where it lands.
+  if (t > T.fall) for (let k = 0; k < 4; k++) drawSmoke(g, PUFFS, tick, 200 + k * 90, 1470, t - T.fall - k * 0.05, { dir: k % 2 ? 1 : -1, wind: 20, seed: 160 + k, n: 4, size: 0.9, life: 4, rise: 14, alpha: 0.6 });
+  // The pullers: heave on the beat, stagger back as it goes, then cheer.
+  const heave = Math.max(0, Math.sin((t - S.s0) * TAU / (2 * beatLen('statue'))));
+  const ropeA = attach([S.ped.x0 + 90 + 150, S.ped.top - 330]), ropeB = attach([S.ped.x0 + 90 + 210, S.ped.top - 230]);
+  const hands = [];
+  S.pullers.forEach((m, i) => {
+    const after = t > T.fall, ch = smooth(invLerp(T.fall + 0.3 + m.j, T.fall + 0.8 + m.j, t));
+    const P = basePose(); P.nf = [30, -FIG.ankle]; P.ff = [-30, -FIG.ankle];
+    P.lean = after ? lerp(-0.45, 0.05, ch) : -0.25 - 0.12 * heave; P.head = after ? -0.1 : 0.05;
+    P.hip = [-8 - 10 * heave, -FIG.hipH + 6 + 4 * heave];
+    const sh = shoulderOf(P, false);
+    P.nh = [sh[0] + 50, sh[1] + 22]; P.fh = [sh[0] + 36, sh[1] + 26]; P.ne = P.fe = [-0.6, 1];
+    if (ch > 0) { P.nh = lerp2(P.nh, [sh[0] + 16, sh[1] - 60 + 6 * Math.sin(t * 8 + i)], ch); P.fh = lerp2(P.fh, [sh[0] - 4, sh[1] - 58], ch); P.ne = P.fe = [0.3, 1]; }
+    const out = drawFigure(g, { x: m.x - (after ? 40 * smooth(invLerp(T.fall, T.fall + 0.3, t)) : 0), y: m.y, s: m.s, dir: 1, outfit: m.outfit, seed: m.seed, light: L }, P, tick);
+    hands.push(lerp2(out.hand, out.farHand, 0.5));
+  });
+  // The ropes (slack once it's down).
+  const slack = smooth(invLerp(T.fall, T.fall + 0.4, t));
+  g.strokeStyle = lit('#8a7050', L); g.lineWidth = 3.4; g.lineCap = 'round';
+  for (const [a, pts] of [[ropeA, [hands[0], hands[2]]], [ropeB, [hands[1], hands[3]]]]) {
+    g.beginPath(); g.moveTo(pts[0][0] - 30, pts[0][1] + 6);
+    for (const h of pts) g.lineTo(h[0], h[1]);
+    const last = pts[pts.length - 1], mid = lerp2(last, a, 0.5);
+    g.quadraticCurveTo(mid[0], mid[1] + 80 * slack + 10, a[0], a[1]); g.stroke();
+  }
+  // Onlookers who cheer when it falls.
+  S.cheer.forEach((m, i) => {
+    const ch = smooth(invLerp(T.fall + 0.2 + m.j, T.fall + 0.6 + m.j, t)), P = basePose();
+    P.lean = 0.02; P.head = -0.05; P.nf = [8, -FIG.ankle]; P.ff = [-8, -FIG.ankle];
+    if (ch > 0) { const sh = shoulderOf(P, false); P.nh = lerp2(P.nh, [sh[0] + 20, sh[1] - 60 + 8 * Math.sin(t * 9 + i * 2)], ch); P.fh = lerp2(P.fh, [sh[0], sh[1] - 56], ch); P.ne = P.fe = [0.3, 1]; }
+    drawFigure(g, { x: m.x, y: m.y, s: m.s, dir: -1, outfit: m.outfit, seed: m.seed, light: L }, P, tick);
+  });
+}
+function camStatue(lt, t) {
+  const T = STA.T; let amp = t > T.fall ? 20 * Math.exp(-(t - T.fall) * 6) : 0;
+  const u = smooth(clamp(lt / durOf('statue')));
+  return { z: lerp(1.08, 1.02, u), x: lerp(560, 540, u) + amp * vnoise(t * 30, 1), y: lerp(1100, 1060, u) + amp * vnoise(t * 27, 2), rot: amp * 0.001 * vnoise(t * 20, 3) };
+}
+SCN.statue = { layers: [STA_LAYERS.bg, STA_LAYERS.king, ...PUFFS], draw: drawStatue, cam: camStatue };
+// "God Save the King", stately and a little slow — cut off before its last note by the crash.
+// Then a cheer and "Yankee Doodle".
+SCORE.statue = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, bell, pz, sn, roll, bd, str, strH, brass } = K, T = STA.T;
+  const gstk = [[0, 'G4', 1], [1, 'G4', 1], [2, 'A4', 1], [3, 'F#4', 1.5], [4.5, 'G4', 0.5], [5, 'A4', 1], [6, 'B4', 1], [7, 'B4', 1], [8, 'C5', 1], [9, 'B4', 1.5], [10.5, 'A4', 0.5], [11, 'G4', 1], [12, 'A4', 1], [13, 'G4', 1], [14, 'F#4', 1]];
+  for (const [bb, n, d] of gstk) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.5);
+  for (const [bb, d, n] of [[0, 3, ['G2', 'D3', 'B3']], [3, 3, ['D2', 'A2', 'F#3']], [6, 2, ['G2', 'D3', 'B3']], [8, 1, ['C3', 'G3', 'E4']], [9, 3, ['D3', 'G3', 'B3']], [12, 3, ['D2', 'A2', 'C4']]]) str(B(bb), d * b + 0.1, n, 0.34);
+  for (let bb = 0; bb < 15; bb++) sn(B(bb), bb % 3 === 0 ? 0.3 : 0.16);
+  hold(s.start + 0.5, T.fall - s.start + 1.5, (time, into) => N.crowdOn(time, into, T.fall - s.start + 1.5, 0.3, 1.5));
+  for (let t = s.start + 2; t < T.fall - 0.3; t += 2 * b) { one(t + b * 0.5, time => N.click(time, 0.35)); one(t + b * 0.56, time => N.click(time, 0.25)); }
+  roll(T.tip, T.fall - 0.03, 0.1, 0.55, 0.04);
+  one(T.fall, time => { N.thunk(time); N.volley(time, 2, 0.08, 0.7); N.clatter(time + 0.05, 0.8); N.splash(time + 0.02, 0.5); });
+  bd(T.fall, 1, 'G1');
+  one(T.fall + 0.35, time => N.cheer(time, 0.8, 2)); one(T.fall + 1.4, time => N.cheer(time, 0.6, 1.4));
+  const yd = [[18, 'G5', 0.5], [18.5, 'G5', 0.5], [19, 'A5', 0.5], [19.5, 'B5', 0.5], [20, 'G5', 0.5], [20.5, 'B5', 0.5], [21, 'A5', 0.5], [21.5, 'D5', 0.5], [22, 'G5', 0.5], [22.5, 'G5', 0.5], [23, 'A5', 0.5], [23.5, 'B5', 0.5], [24, 'G5', 1], [25, 'F#5', 1], [26, 'G5', 2]];
+  mel(yd, 0.6);
+  for (let bb = 18; bb < 27; bb++) { sn(B(bb), 0.4); sn(B(bb + 0.5), 0.22); if (bb % 2 === 0) { bd(B(bb), 0.5); pz(B(bb), 'G2', 0.6, 0.3); } else pz(B(bb), 'D3', 0.5, 0.3); }
+  strH(B(18), s.end - B(18) + 0.2, ['G3', 'B3', 'D4'], 0.3);
+  bell(B(26), 'G4', 0.4, 2); bell(B(26.5), 'D4', 0.35, 2);
+};
+
+/* ================= scene 16 — escape from Long Island, 1776 =================== */
+// Night on the East River: boats ferry the beaten army from Brooklyn to Manhattan, oars
+// muffled, while fog rolls in and hides them. Toward the end, dawn.
+const RET = (() => {
+  const s0 = sceneById.retreat.start, B = beatOf('retreat'), bl = beatLen('retreat');
+  const boats = [
+    { x0: 1060, v: 26, y: 1112, s: 0.82, seed: 260, crew: ['rowerA', 'militiaC'], ph: 0.3 },
+    { x0: 760, v: 30, y: 1300, s: 1.14, seed: 264, crew: ['rowerB', 'continental', 'militiaA'], ph: 0.6 },
+    { x0: 900, v: 22, y: 1566, s: 1.56, seed: 268, crew: ['rowerA', 'continental', 'colonistB', 'militiaB'], ph: 0 },
+  ];
+  return { s0, B, period: 2 * bl, boats, dawn: s0 + 11 };
+})();
+const RET_LIGHT = { tint: '#2a3450', amt: 0.4, dark: 0.16, ink: '#0e1220', dir: [-0.6, -0.8] };
+function* buildEastRiver(g, rng) {
+  // A dark, low sky and black water; Manhattan's shore faint on the left, Brooklyn's on the right.
+  const sk = g.createLinearGradient(0, 0, 0, 1080); sk.addColorStop(0, '#141a2a'); sk.addColorStop(1, '#2a3346');
+  g.fillStyle = sk; g.fillRect(-40, -40, 1160, 1130); g.fillStyle = '#10151f'; g.fillRect(-40, 1060, 1160, 900);
+  yield* pencilG(g, rng, { x0: -40, y0: -40, x1: 1120, y1: 1080 }, () => true, (x, y) => clamp(0.2 + 0.4 * (y / 1060) + 0.1 * fbm(x * 0.003, y * 0.006, 151)), ['#141a2a', '#1a2132', '#20293c', '#283246', '#303b50'],
+    { flow: FLOW.noise(0.05, 0.4, 0.002, 151), curve: 0.4, gap: 4.2, len: [26, 50], crossOff: 0.6, crossAmt: 0.4, washAlpha: 0.5, alpha: 0.7, noise: 0.12 });
+  const shoreL = x => 1030 + 30 * Math.sin(x * 0.01), shoreR = x => 1000 - 40 * smooth(clamp((x - 700) / 300));
+  yield* pencilG(g, rng, { x0: -40, y0: 960, x1: 520, y1: 1080 }, (x, y) => y > shoreL(x) - 26 && y < 1070 && x < 480, () => 0.2, ['#07090f', '#0c0f18', '#121622'], { angle: 0, wander: 0.1, gap: 3, len: [14, 26], cross: false });
+  yield* pencilG(g, rng, { x0: 640, y0: 900, x1: 1120, y1: 1090 }, (x, y) => x > 660 + (1080 - y) * 0.8 && y > shoreR(x) && y < 1086, () => 0.18, ['#07090f', '#0c0f18', '#121622'], { angle: 0.1, wander: 0.2, gap: 3, len: [14, 26], cross: false });
+  for (const [x, y] of [[120, 1040], [260, 1036], [400, 1044]]) { g.fillStyle = 'rgba(230,170,90,0.7)'; g.fillRect(x, y, 4, 5); }
+  yield* pencilG(g, rng, { x0: -40, y0: 1060, x1: 1120, y1: 1960 }, (x, y) => y > 1066, (x, y) => clamp(0.3 + 0.14 * Math.sin(y * 0.15 + Math.sin(x * 0.02) * 2) + 0.12 * fbm(x * 0.008, y * 0.03, 152)), ['#0c111a', '#121824', '#18202e', '#1f2838', '#283244', '#34405a'],
+    { flow: FLOW.noise(0.0, 0.06, 0.006, 152), curve: 0.35, gap: 3.6, len: [22, 50], crossAngle: 0.25, crossAmt: 0.35, alpha: 0.75, washAlpha: 0.5, noise: 0.14 });
+}
+// A long band of fog that repeats every 2160 px: pale, soft-edged strokes drifting sideways.
+function* buildFog(g, rng, k) {
+  const P = 2160, H = 360, TW = x => TAU * x / P, per = (x, y) => fbm(Math.cos(TW(x)) * 2.2, Math.sin(TW(x)) * 2.2 + y * 0.012, 160 + k);
+  const S = styles([['#7c8898', 9, 0.1], ['#9aa6b4', 8, 0.11], ['#b8c2cc', 6, 0.12], ['#c8d0d8', 3, 0.2]], 5);
+  yield* hatchG(rng, { x0: 0, y0: 0, x1: P, y1: H }, { angle: 0, flow: (x, y) => 0.05 * Math.sin(TW(x) * 3 + y * 0.02), curve: 0.4, gap: 3, lenMin: 40, lenMax: 110, jitter: 0.08 }, (x, y, r) => {
+    const edge = Math.sin(Math.PI * y / H), d = edge * (0.5 + 0.5 * per(x, y));
+    return r() < d * d * 1.4 ? S[r() < 0.75 ? clamp(Math.floor((0.5 + per(x, y * 2)) * 3), 0, 2) : 3] : null;
+  });
+  wrapX(S, P, 90); yield* drawStylesG(g, S);
+}
+const RET_LAYERS = {
+  bg: new BoilLayer({ name: 'eastRiver', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.6, seed: 2501, build: buildEastRiver }),
+  fog: [0, 1].map(k => new BoilLayer({ name: 'fog' + k, box: { x0: 0, y0: 0, x1: 2160, y1: 360 }, res: 0.5, seed: 2502 + k, build: function* (g, rng) { yield* buildFog(g, rng, k); } })),
+};
+// A rowboat heading left (bow at -x): hull, oars, rowers facing the stern, soldiers aboard.
+function drawRowboat(g, B2, t, tick, L) {
+  const x = B2.x0 - B2.v * (t - RET.s0), y = B2.y, s = B2.s, rng = mulberry32(hash3(tick, B2.seed, 7));
+  const bob = 3 * s * Math.sin(t * 1.3 + B2.seed), X = p => [x + p[0] * s, y + bob + p[1] * s];
+  const c = frac((t - RET.s0) / RET.period + B2.ph);
+  // Crew: the rowers (seated, facing the stern) and soldiers standing with muskets grounded.
+  B2.crew.forEach((o, i) => {
+    const px = -110 + i * 80;
+    if (i === 0 || (i === 1 && B2.crew.length > 3)) {
+      const P = rowerPose(c), F = { x: x + (px + 20) * s, y: y + bob - 4 * s, s: s * 1.05, dir: 1, outfit: o, seed: B2.seed + i, light: L, seatedHide: true };
+      const out = drawFigure(g, F, P, tick);
+      const hd = lerp2(out.hand, out.farHand, 0.5), piv = X([px + 60, -44]), bl = [piv[0] + (piv[0] - hd[0]) * 2.8, piv[1] + (piv[1] - hd[1]) * 2.8];
+      g.strokeStyle = lit('#6b5038', L); g.lineWidth = 5 * s; g.lineCap = 'round'; g.beginPath(); g.moveTo(hd[0], hd[1]); g.lineTo(bl[0], bl[1]); g.stroke();
+      g.fillStyle = lit('#7a5c40', L); g.beginPath(); g.ellipse(bl[0], bl[1], 16 * s, 7 * s, Math.atan2(bl[1] - piv[1], bl[0] - piv[0]), 0, TAU); g.fill();
+    } else {
+      const P = carry(basePose(), 'order', { bayonet: false }); P.lean = 0.04 + 0.03 * Math.sin(t + i); P.head = 0.08;
+      drawFigure(g, { x: x + px * s, y: y + bob - 10 * s, s: s * 1.02, dir: -1, outfit: o, seed: B2.seed + i, light: L }, P, tick);
+    }
+  });
+  // The hull in front of their legs.
+  const hull = [[-190, -58], [-150, -44], [170, -46], [196, -52], [178, -8], [120, 6], [-150, 6], [-178, -18]].map(X);
+  g.fillStyle = lit('#2a1e16', L); g.beginPath(); polyPath(g, hull); g.fill();
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = pat('grain', tick, B2.seed, 0); g.fill(); g.globalCompositeOperation = 'source-over';
+  g.strokeStyle = lit('#4a3a2a', L); g.lineWidth = 2; g.beginPath(); for (const k of [0.4, 0.7]) { const a = lerp2(hull[1], hull[7], k), b = lerp2(hull[2], hull[4], k); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); } g.stroke();
+  sketchLine(g, hull.concat([hull[0]]), rng, 0.8, L.ink, 2, 0.9);
+  sketchLine(g, [hull[0], hull[1], hull[2], hull[3]], rng, 0.6, lit('#8a7458', L), 3 * s, 0.8);
+  // A dim lantern on the middle boat.
+  if (B2.seed === 264) { const lp = X([150, -90]); g.save(); g.globalCompositeOperation = 'lighter'; const gr = g.createRadialGradient(lp[0], lp[1], 0, lp[0], lp[1], 90); gr.addColorStop(0, 'rgba(255,190,100,0.35)'); gr.addColorStop(1, 'rgba(255,150,60,0)'); g.fillStyle = gr; g.fillRect(lp[0] - 90, lp[1] - 90, 180, 180); g.restore(); g.fillStyle = '#ffd27a'; g.fillRect(lp[0] - 4, lp[1] - 6, 8, 12); }
+  // Wake.
+  g.strokeStyle = `rgba(150,165,190,0.35)`; g.lineWidth = 2; g.beginPath(); for (let k = 1; k < 6; k++) { const wx = x + (190 + k * 40) * s, wy = y + 8 * s + k * 3; g.moveTo(wx, wy); g.lineTo(wx + 26 * s, wy + 2); } g.stroke();
+}
+function drawRetreat(g, t, lt, tick) {
+  const R = RET, L = RET_LIGHT;
+  RET_LAYERS.bg.draw(g, tick);
+  // Brooklyn's campfires, left burning to fool the British.
+  g.save(); g.globalCompositeOperation = 'lighter';
+  for (const [x, y] of [[760, 1020], [880, 990], [990, 1004]]) { const f = 0.8 + 0.2 * vnoise(lt * 7 + x, 3), gr = g.createRadialGradient(x, y, 0, x, y, 50 * f); gr.addColorStop(0, 'rgba(255,160,70,0.6)'); gr.addColorStop(1, 'rgba(255,120,40,0)'); g.fillStyle = gr; g.fillRect(x - 60, y - 60, 120, 120); }
+  g.restore();
+  const fogAt = (k, y, speed, alpha, sc = 1) => { const layer = RET_LAYERS.fog[k], P = 2160 * sc, o = ((lt * speed) % P + P) % P; for (const d of [-P, 0]) layer.drawAt(g, tick, d + o - 60, y, sc, 0, alpha, 1); };
+  fogAt(0, 880, 14, 0.9);
+  drawRowboat(g, R.boats[0], t, tick, L);
+  fogAt(1, 1090, 22, 0.9, 1.1);
+  drawRowboat(g, R.boats[1], t, tick, L);
+  fogAt(0, 1320, 30, 0.85, 1.2);
+  drawRowboat(g, R.boats[2], t, tick, L);
+  fogAt(1, 1560, 40, 0.7, 1.35);
+  // Dawn comes up grey through the fog.
+  const d = smooth(invLerp(R.dawn, R.dawn + 5, t));
+  if (d > 0) { g.save(); g.globalCompositeOperation = 'screen'; g.globalAlpha = 0.35 * d; const gr = g.createLinearGradient(0, 0, 0, 1400); gr.addColorStop(0, '#c8b8a8'); gr.addColorStop(1, '#6a7890'); g.fillStyle = gr; g.fillRect(-100, -100, 1300, 2200); g.restore(); }
+}
+function camRetreat(lt) { const u = smooth(clamp(lt / durOf('retreat'))); return { z: lerp(1.06, 1.1, u), x: lerp(600, 520, u), y: lerp(1190, 1230, u), rot: 0 }; }
+SCN.retreat = { layers: [RET_LAYERS.bg, ...RET_LAYERS.fog], draw: drawRetreat, cam: camRetreat };
+// Hushed: a low drone, muffled strokes, water and oarlocks; a distant fife; grey dawn.
+SCORE.retreat = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, glock, pz, bd, str, strH } = K, R = RET;
+  hold(s.start, dur, (time, into) => N.harbourOn(time, into, dur));
+  hold(s.start, dur + 0.3, (time, into) => N.droneOn(['D2', 'A2'], time, into, dur + 0.3, 0.42));
+  for (let t = s.start + 0.2; t < s.end - 0.3; t += R.period) { bd(t, 0.22, 'D2'); one(t + 0.05, time => N.splash(time, 0.12)); one(t + R.period * 0.45, time => N.click(time, 0.1)); }
+  strH(B(2), B(10) - B(2), ['D3', 'F3', 'A3'], 0.16); strH(B(10), B(14) - B(10), ['Bb2', 'D3', 'F3'], 0.16);
+  mel([[4, 'A4', 1.5], [5.5, 'G4', 0.5], [6, 'F4', 1], [7, 'E4', 1], [8, 'D4', 2]], 0.28);
+  mel([[11, 'D5', 1.5], [12.5, 'C5', 0.5], [13, 'A4', 2]], 0.24);
+  strH(B(14), s.end - B(14) + 0.3, ['D3', 'F#3', 'A3', 'E4'], 0.26);
+  ['A5', 'D6', 'F#6'].forEach((n, k) => glock(B(15) + k * 0.2, n, 0.2, 2));
+  pz(B(14), 'D2', 0.4, 1.2);
+};
 
 /* ================= scene 5 — crossing the Delaware, 1776 =================== */
 const STORM = { tint: '#26304c', amt: 0.34, dark: 0.12, ink: '#10131f', dir: [0.5, -0.86] };
