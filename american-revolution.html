@@ -6555,8 +6555,10 @@ function* buildTreatyBg(g, rng) {
   yield* stippleG(g, rng, box, (x, y) => !inP(x, y), (x, y) => clamp(0.5 + 0.2 * fbm(x * 0.004, y * 0.004, 2702) - 0.25 * smooth(clamp(Math.hypot(x - 1010, y - 240) / 1500))), ['#1e3024', '#2a4030', '#36523c', '#46644a', '#587658'], { density: 0.09, size: 2.4 });
   // Laid paper: a pale ground, chain lines down, laid lines across.
   g.fillStyle = '#e6dcc4'; g.beginPath(); polyPath(g, TRE_PAGE); g.fill();
+  g.save(); g.beginPath(); polyPath(g, TRE_PAGE); g.clip();
   yield* pencilG(g, rng, { x0: 100, y0: 140, x1: 980, y1: 2050 }, inP, (x, y) => clamp(0.7 + 0.1 * fbm(x * 0.004, y * 0.003, 2703) - 0.4 * Math.exp(-Math.min(x - 110, 970 - x, y - 150, 2040 - y) / 30)), ['#b8aa88', '#cbbf9e', '#dcd2b6', '#e8e0c8', '#f2ecd8'],
     { angle: 0, flow: FLOW.noise(0, 0.05, 0.003, 2703), curve: 0.1, gap: 3.6, len: [30, 70], cross: false, washAlpha: 0.3 });
+  g.restore();
   g.strokeStyle = 'rgba(150,136,104,0.35)'; g.lineWidth = 1.5; g.beginPath(); for (let x = 136; x < 970; x += 27) { g.moveTo(x, 156); g.lineTo(x + (rng() - 0.5) * 3, 2034); } g.stroke();
   sketchLine(g, TRE_PAGE.concat([TRE_PAGE[0]]), rng, 1.2, '#6a5434', 2, 0.8);
   // The article already written, and the witnessing clause.
@@ -6802,7 +6804,89 @@ SCORE.farewell = (K, { B, b, s, dur, mel }) => {
   for (const [bb, n, d] of [[10, 'F3', 2], [12, 'D3', 2], [14, 'C3', 2], [16, 'F3', 4]]) brass(B(bb), d * b * 0.95, [n, K.up(n, 7)], 0.34);
   hold(T.bow, s.end - T.bow, (time, into) => N.crowdOn(time, into, s.end - T.bow, 0.16, 1.5));
   bell(T.hand, 'F4', 0.35, 4); glock(T.hand + 0.1, 'C6', 0.2, 2); glock(T.hand + 0.3, 'F6', 0.16, 2);
-  for (let k = 0; k < 5; k++) one(T.turn + 0.4 + k * 0.55, time => N.knock ? null : N.click(time, 0.18));
+  for (let k = 0; k < 5; k++) one(T.turn + 0.4 + k * 0.55, time => N.click(time, 0.18));
+};
+
+/* ===================== scene 29 — the Constitution, 1787 ===================== */
+// "We the People" written large, the Preamble, the Articles; Washington signs, then the
+// others; morning sun comes across the page, and Franklin's rising sun.
+const CST_PAGE = (() => { const P = [], r = mulberry32(2901); for (let x = 120; x <= 960; x += 28) P.push([x, 90 + (r() - 0.5) * 5]); for (let y = 90; y <= 2060; y += 36) P.push([960 + (r() - 0.5) * 5, y]); for (let x = 960; x >= 120; x -= 28) P.push([x, 2060 + (r() - 0.5) * 5]); for (let y = 2060; y >= 90; y -= 36) P.push([120 + (r() - 0.5) * 5, y]); return P; })();
+const CST = makeScript('constitution', (g, A) => {
+  const c = A.c;
+  A.item(c('header'), c('preamble') - 0.15, A.textLines(g, 'We the People', A.fit(g, 'We the People', `150px ${SCRIPT}`, 780), 540, 330, 0, 2000, 'center'));
+  A.item(c('preamble'), c('articles') - 0.1, A.textLines(g, 'of the United States, in Order to form a more perfect Union, establish Justice, insure domestic Tranquility, provide for the common defence, promote the general Welfare, and secure the Blessings of Liberty to ourselves and our Posterity, do ordain and establish this Constitution for the United States of America.', `italic 33px ${SERIF}`, 170, 470, 44, 740, 'left'));
+  const pe = A.runs[A.runs.length - 1].y;
+  const a1 = A.textLines(g, 'Article. I.', `bold 44px ${SERIF}`, 540, pe + 100, 0, 2000, 'center'), s1 = A.scrawl(2902, 170, pe + 160, 4, 38, 740);
+  const a2 = A.textLines(g, 'Article. II.', `bold 44px ${SERIF}`, 540, pe + 390, 0, 2000, 'center'), s2 = A.scrawl(2903, 170, pe + 450, 3, 38, 740);
+  A.item(c('articles'), c('sign') - 0.1, [...a1, ...s1, ...a2, ...s2]);
+  const sy = pe + 660;
+  const gw = A.textLines(g, 'Go: Washington — Presidt.', A.fit(g, 'Go: Washington — Presidt.', `76px ${SCRIPT}`, 700), 560, sy, 0, 2000, 'center');
+  A.item(c('sign'), c('others') - 0.2, [...gw, ...A.textLines(g, 'and deputy from Virginia', `italic 30px ${SERIF}`, 560, sy + 50, 0, 2000, 'center')]);
+  const names = [['B Franklin', 330, 150], ['Alexander Hamilton', 750, 150], ['James Madison Jr.', 330, 250], ['Gouv Morris', 750, 250], ['Rufus King', 330, 350], ['Robt Morris', 750, 350]];
+  A.item(c('others'), A.dur - 1.6, names.flatMap(([n, x, dy]) => A.textLines(g, n, A.fit(g, n, `52px ${SCRIPT}`, 330), x, sy + dy, 0, 2000, 'center')));
+  CST.sy = sy; CST.pe = pe;
+}, { park: [1160, 160], tilt: -0.82 });
+function* buildConstitutionBg(g, rng) {
+  const box = { x0: -80, y0: -220, x1: 1160, y1: 2300 }, inP = polyMask([CST_PAGE], box, 3);
+  // Green leather with a gilt tooled border, the grain running every which way.
+  g.fillStyle = '#23402c'; g.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+  yield* scribbleG(g, rng, box, (x, y) => !inP(x, y), (x, y) => clamp(0.45 + 0.2 * fbm(x * 0.003, y * 0.003, 2904)), ['#1a3222', '#22402c', '#2c5036', '#386042'], { cell: 16, step: 5, loops: 5, width: 1.6, alpha: 0.5 });
+  g.strokeStyle = '#b8964a'; g.lineWidth = 4; g.strokeRect(60, 30, 960, 2090); g.lineWidth = 1.6; g.strokeRect(74, 44, 932, 2062);
+  for (let x = 90; x < 1000; x += 34) { g.fillStyle = '#b8964a'; g.beginPath(); g.moveTo(x, 37); g.lineTo(x + 5, 32); g.lineTo(x + 10, 37); g.lineTo(x + 5, 42); g.closePath(); g.fill(); }
+  // Cool, pale parchment: long level strokes, edges darkened.
+  g.fillStyle = '#ddd0b0'; g.beginPath(); polyPath(g, CST_PAGE); g.fill();
+  const ed = (x, y) => Math.min(x - 120, 960 - x, y - 90, 2060 - y);
+  g.save(); g.beginPath(); polyPath(g, CST_PAGE); g.clip();
+  yield* pencilG(g, rng, { x0: 112, y0: 82, x1: 968, y1: 2068 }, inP, (x, y) => clamp(0.72 + 0.1 * fbm(x * 0.003, y * 0.002, 2905) - 0.4 * Math.exp(-ed(x, y) / 30)), ['#a8946c', '#bca87e', '#cebc94', '#dccdaa', '#e8dcc0', '#f0e8d2'],
+    { angle: 0.02, flow: FLOW.noise(0.02, 0.06, 0.002, 2905), curve: 0.1, gap: 3.6, len: [36, 80], cross: false, washAlpha: 0.34 });
+  g.restore();
+  sketchLine(g, CST_PAGE.concat([CST_PAGE[0]]), rng, 1.2, '#5c4428', 2.2, 0.85);
+}
+const CST_LAYER = new BoilLayer({ name: 'constitutionBg', box: { x0: -80, y0: -220, x1: 1160, y1: 2300 }, res: 0.6, seed: 2906, build: buildConstitutionBg });
+function drawConstitution(g, t, lt, tick) {
+  CST.layout(g);
+  CST_LAYER.draw(g, tick);
+  CST.draw(g, lt, tick);
+  // Morning sun sweeping across the page from the right.
+  const c = CST.c, sw = smooth(invLerp(c('others') - 0.5, c('others') + 3.5, lt));
+  if (sw > 0) {
+    g.save(); g.globalCompositeOperation = 'lighter';
+    const x0 = lerp(1500, -400, sw), gr = g.createLinearGradient(x0 + 900, 0, x0, 400);
+    gr.addColorStop(0, `rgba(255,200,110,${0.26 * sw})`); gr.addColorStop(0.6, `rgba(255,180,90,${0.12 * sw})`); gr.addColorStop(1, 'rgba(255,170,80,0)');
+    g.fillStyle = gr; g.fillRect(-200, -300, 1500, 2700); g.restore();
+  }
+}
+function drawConstitutionOver(g, t, tick) {
+  const T = sceneById.constitution, lt = t - T.start, c = CST.c, u = easeOut3(invLerp(c('others') + 1.2, c('others') + 2.2, lt));
+  drawRibbon(g, tick, 540, 1330, u, '“It is a rising and not a setting Sun.”', `italic 40px ${SERIF}`, { w: 470, seed: 291 });
+  if (u > 0.9) { g.globalAlpha = smooth(invLerp(c('others') + 2.1, c('others') + 2.6, lt)); g.font = `italic 32px ${SERIF}`; g.textAlign = 'center'; g.fillStyle = '#3a2616'; g.fillText('— Benjamin Franklin', 700, 1436); g.textAlign = 'left'; g.globalAlpha = 1; }
+}
+function camConstitution(lt) {
+  CST.layout(ctx);
+  const c = CST.c, sy = CST.sy, pe = CST.pe, dur = durOf('constitution');
+  const y = track([[0, 330], [c('preamble') - 0.2, 340], [c('preamble') + 1.5, 520], [c('articles'), pe - 60], [c('articles') + 1.5, pe + 250], [c('sign') - 0.2, pe + 420], [c('sign') + 1, sy - 20], [c('others') + 1, sy + 160], [dur, sy + 30]])(lt);
+  const z = track([[0, 2.0], [c('preamble') - 0.2, 1.9], [c('preamble') + 1.5, 1.35], [c('articles'), 1.3], [c('sign'), 1.15], [c('sign') + 1, 1.25], [c('others') + 1, 1.08], [dur, 0.98]])(lt);
+  return { z, x: track([[0, 540], [c('sign'), 560], [dur, 560]])(lt), y, rot: -0.02 };
+}
+SCN.constitution = { layers: [CST_LAYER], draw: drawConstitution, cam: camConstitution, over: drawConstitutionOver };
+// Hopeful and broad, in C: "We the People" climbs a major arpeggio; the quill scratches
+// under the Preamble; brass for Washington's name; bells and glockenspiel with the sunrise.
+SCORE.constitution = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, bell, glock, pz, sn, bd, str, strH, brass } = K, c = CST.c;
+  for (const [bb, n, d] of [[0.5, 'C4', 1], [1.5, 'E4', 1], [2.5, 'G4', 1], [3.5, 'C5', 2]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.5);
+  strH(B(0.5), B(8) - B(0.5), ['C3', 'G3', 'E4'], 0.3);
+  const wr = (a, z, v) => { for (let tt = s.start + a; tt < s.start + z; tt += 0.1 + 0.07 * Math.abs(Math.sin(tt * 11))) one(tt, time => N.quill(time, v)); };
+  wr(c('header'), c('preamble') - 0.2, 0.26); wr(c('preamble'), c('articles') - 0.2, 0.2); wr(c('articles'), c('sign') - 0.2, 0.2); wr(c('sign'), c('others') - 0.3, 0.26); wr(c('others'), dur - 1.7, 0.2);
+  for (const [bb, ch] of [[4, ['F3', 'A3', 'C4']], [8, ['C3', 'G3', 'E4']], [12, ['A2', 'E3', 'C4']], [14, ['F2', 'C3', 'A3']], [16, ['G2', 'D3', 'B3']]]) str(B(bb), 2 * b * 0.98 * (bb < 8 ? 2 : 1), ch, 0.26);
+  mel([[4, 'E5', 1.5], [5.5, 'D5', 0.5], [6, 'C5', 1], [7, 'G4', 1], [8, 'A4', 1], [9, 'C5', 1], [10, 'E5', 1], [11, 'D5', 1], [12, 'C5', 2], [14, 'A4', 1], [15, 'C5', 1], [16, 'B4', 1], [17, 'D5', 1]], 0.36);
+  for (let bb = 4; bb < 18; bb++) pz(B(bb), bb % 2 ? 'G2' : 'C3', 0.35, 0.3);
+  const sb = c('sign') / (dur / 28);
+  for (const [bb, n, d] of [[sb, 'G4', 1], [sb + 1, 'C5', 1], [sb + 2, 'E5', 2]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.6);
+  sn(B(sb), 0.3); bd(B(sb), 0.5, 'C2');
+  const ob = c('others') / (dur / 28);
+  strH(B(ob), s.end - B(ob) + 0.3, ['C3', 'G3', 'E4', 'C5'], 0.34);
+  mel([[ob, 'G5', 1], [ob + 1, 'E5', 1], [ob + 2, 'C6', 2], [ob + 4, 'B5', 1], [ob + 5, 'C6', 2]], 0.3, 0, (tt, n, d, v) => glock(tt, n, v, d));
+  bell(B(ob + 1.5), 'C4', 0.35, 4); bell(B(ob + 2.5), 'G4', 0.28, 4);
 };
 
 /* ======================= scene 7 — peace, 1783 ============================= */
