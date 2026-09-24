@@ -323,6 +323,7 @@ const lit = (hex, L) => (L.amt || L.dark ? mix(mix(hex, '#000000', L.dark), L.ti
 /* ===================== hatching engine (colored pencil) ================== */
 // A style is one pencil: colour, width, alpha. Strokes are split across a few
 // groups that are stroked separately so overlaps build up like real pencil.
+// Every stroke is a gentle quadratic curve: x0, y0, control, x1, y1.
 function styles(defs, groups = 5) {
   return defs.map(([color, width, alpha]) => ({ color, width, alpha, g: Array.from({ length: groups }, () => []) }));
 }
@@ -335,9 +336,9 @@ function* drawStylesG(g, list) {
       for (let i0 = 0; i0 < arr.length; i0 += 6000) {
         g.beginPath();
         const i1 = Math.min(arr.length, i0 + 6000);
-        for (let i = i0; i < i1; i += 4) { g.moveTo(arr[i], arr[i + 1]); g.lineTo(arr[i + 2], arr[i + 3]); }
+        for (let i = i0; i < i1; i += 6) { g.moveTo(arr[i], arr[i + 1]); g.quadraticCurveTo(arr[i + 2], arr[i + 3], arr[i + 4], arr[i + 5]); }
         g.stroke();
-        if (i1 - i0 > 2000) { g.globalAlpha = 1; yield; g.strokeStyle = s.color; g.lineWidth = s.width; g.globalAlpha = s.alpha; }
+        if (i1 - i0 > 3000) { g.globalAlpha = 1; yield; g.strokeStyle = s.color; g.lineWidth = s.width; g.globalAlpha = s.alpha; }
       }
     }
   }
@@ -345,16 +346,31 @@ function* drawStylesG(g, list) {
 }
 const run = it => { while (!it.next().done); };
 const drawStyles = (g, list) => run(drawStylesG(g, list));
-function put(style, rng, cx, cy, ang, len) {
-  const ex = Math.cos(ang) * len * 0.5, ey = Math.sin(ang) * len * 0.5;
-  style.g[(rng() * style.g.length) | 0].push(cx - ex, cy - ey, cx + ex, cy + ey);
+function put(style, rng, cx, cy, ang, len, bend = 0) {
+  const c = Math.cos(ang), s = Math.sin(ang), ex = c * len * 0.5, ey = s * len * 0.5;
+  style.g[(rng() * style.g.length) | 0].push(cx - ex, cy - ey, cx - s * bend * 2, cy + c * bend * 2, cx + ex, cy + ey);
 }
 const any = (rng, arr) => arr[(rng() * arr.length) | 0];
 
-// Walk a jittered grid of short strokes across a box. `pick(x, y, rng)` returns
-// the pencil for that spot, or null to leave paper showing.
+// Stroke-direction fields. Hatching follows the form it describes: grass flicks
+// upward, water lies flat, wood follows its grain, round things get curved strokes.
+const angDiff = (a, b) => { let d = (a - b) % Math.PI; if (d > Math.PI / 2) d -= Math.PI; if (d < -Math.PI / 2) d += Math.PI; return d; };
+const FLOW = {
+  noise: (base, amp = 0.3, scale = 0.004, seed = 0) => (x, y) => base + amp * vnoise2(x * scale, y * scale, seed),
+  around: (cx, cy, sy = 1, twist = 0) => (x, y) => Math.atan2((y - cy) * sy, x - cx) + Math.PI / 2 + twist,
+  radial: (cx, cy) => (x, y) => Math.atan2(y - cy, x - cx),
+  toward: (vx, vy) => (x, y) => Math.atan2(vy - y, vx - x),
+  along: (f, dx = 8) => x => Math.atan2(f(x + dx) - f(x - dx), 2 * dx),          // parallel to the curve y = f(x)
+  mix: (f1, f2, w) => (x, y) => { const a = f1(x, y); return a + angDiff(f2(x, y), a) * (typeof w === 'function' ? w(x, y) : w); },
+  wobble: (f, amp = 0.2, scale = 0.01, seed = 0) => (x, y) => f(x, y) + amp * vnoise2(x * scale, y * scale, seed),
+};
+
+// Walk a jittered lattice of short strokes across a box. `pick(x, y, rng)` returns
+// the pencil for that spot, or null to leave paper showing. `flow` sets each
+// stroke's direction; strokes bend to follow it, plus a little wobble.
 function* hatchG(rng, box, o, pick) {
-  const { angle, gap, lenMin, lenMax, jitter = 0.12, spacing = 0.62, angleAt } = o;
+  const { angle = 0, gap, lenMin, lenMax, jitter = 0.12, spacing = 0.62, curve = 0.15, patchy = 0, seed = 0 } = o;
+  const flow = o.flow || o.angleAt;
   const dx = Math.cos(angle), dy = Math.sin(angle), nx = -dy, ny = dx;
   let n0 = Infinity, n1 = -Infinity, d0 = Infinity, d1 = -Infinity, count = 0;
   for (const [x, y] of [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]]) {
@@ -369,36 +385,46 @@ function* hatchG(rng, box, o, pick) {
       const my = (pd + len * 0.5) * dy + (pn + off) * ny;
       pd += len * (spacing + 0.45 * rng());
       if (mx < box.x0 || mx > box.x1 || my < box.y0 || my > box.y1) continue;
+      if (patchy && rng() < patchy * (1 + vnoise2(mx * 0.012, my * 0.012, 71 + seed))) continue;
       const st = pick(mx, my, rng);
       if (!st) continue;
-      put(st, rng, mx, my, (angleAt ? angleAt(mx, my) : angle) + (rng() - 0.5) * jitter, len);
+      const a = (flow ? flow(mx, my) : angle) + (rng() - 0.5) * jitter;
+      let bend = (rng() - 0.5) * curve * len * 0.5;
+      if (flow && curve) { const hx = Math.cos(a) * len * 0.5, hy = Math.sin(a) * len * 0.5; bend += len * 0.25 * angDiff(flow(mx + hx, my + hy), flow(mx - hx, my - hy)); }
+      put(st, rng, mx, my, a, len, bend);
     }
     if (++count % 12 === 0) yield;
   }
 }
 const hatch = (rng, box, o, pick) => run(hatchG(rng, box, o, pick));
 
-// Layered pencil fill: a broad soft wash, the main strokes, then cross-hatching
-// that builds up in the dark parts. `tone(x, y)` is 0 (darkest) … 1 (lightest);
-// `pal` lists pencils from dark to light.
+// Layered pencil fill: a broad soft wash, the main strokes (at three pressures),
+// then cross-hatching that builds up in the dark parts. `tone(x, y)` is
+// 0 (darkest) … 1 (lightest); `pal` lists pencils from dark to light.
+// Without an explicit `flow`, strokes drift gently around `angle`, and each
+// region gets its own drift so no two areas are hatched quite alike.
 function* pencilG(g, rng, box, inside, tone, pal, o = {}) {
-  const n = pal.length, angle = o.angle ?? -0.93, gap = o.gap ?? 4.4;
+  const n = pal.length, base = o.angle ?? -0.93, gap = o.gap ?? 4.4;
   const [l0, l1] = o.len || [10, 20];
-  const noise = o.noise ?? 0.22;
+  const noise = o.noise ?? 0.22, seed = hash3(box.x0 | 0, box.y0 | 0, ((box.x1 | 0) * 31 + (box.y1 | 0) + n * 7) | 0) % 997;
+  const flow = o.flow || o.angleAt || FLOW.noise(base, o.wander ?? 0.32, o.wanderScale ?? 0.0035, seed);
+  const crossFlow = o.crossFlow || (o.crossAngle !== undefined ? FLOW.noise(o.crossAngle, 0.25, 0.004, seed + 1) : (x, y) => flow(x, y) + (o.crossOff ?? 1.2));
   const pickI = (x, y, r) => clamp(Math.floor((tone(x, y) + (r() - 0.5) * noise) * n), 0, n - 1);
+  const W = o.width ?? 2.4, A = o.alpha ?? 0.88, curve = o.curve ?? 0.2;
   const wash = styles(pal.map(c => [c, o.washWidth ?? 6, o.washAlpha ?? 0.32]), 3);
-  const main = styles(pal.map(c => [c, o.width ?? 2.4, o.alpha ?? 0.88]), 5);
-  const cross = styles([[o.crossColor || pal[0], o.crossWidth ?? 1.9, o.crossAlpha ?? 0.6]], 4);
+  const main = styles(pal.flatMap(c => [[c, W * 0.7, A * 0.8], [c, W, A], [c, W * 1.35, Math.min(1, A * 1.05)]]), 3);
+  const cc = o.crossColor || pal[0], cw = o.crossWidth ?? 1.9, ca = o.crossAlpha ?? 0.6;
+  const cross = styles([[cc, cw * 0.8, ca * 0.9], [cc, cw * 1.25, ca]], 4);
   if (o.wash !== false) {
-    yield* hatchG(rng, box, { angle, gap: gap * 1.5, lenMin: l0 * 1.7, lenMax: l1 * 1.6, jitter: 0.22, spacing: 0.55 },
+    yield* hatchG(rng, box, { angle: base, flow, gap: gap * 1.5, lenMin: l0 * 1.7, lenMax: l1 * 1.6, jitter: 0.22, spacing: 0.55, curve: curve * 0.6 },
       (x, y, r) => (inside(x, y) ? wash[pickI(x, y, r)] : null));
   }
-  yield* hatchG(rng, box, { angle, gap, lenMin: l0, lenMax: l1, jitter: o.jitter ?? 0.16, angleAt: o.angleAt },
-    (x, y, r) => (inside(x, y) && r() < (o.density ?? 0.985) ? main[pickI(x, y, r)] : null));
+  yield* hatchG(rng, box, { angle: base, flow, gap, lenMin: l0, lenMax: l1, jitter: o.jitter ?? 0.16, curve, patchy: o.patchy ?? 0.05, seed },
+    (x, y, r) => { if (!inside(x, y) || r() > (o.density ?? 0.985)) return null; const i = pickI(x, y, r), p = r(); return main[i * 3 + (p < 0.22 ? 0 : p < 0.8 ? 1 : 2)]; });
   if (o.cross !== false) {
     const amt = o.crossAmt ?? 1;
-    yield* hatchG(rng, box, { angle: o.crossAngle ?? 0.62, gap: gap * 1.45, lenMin: l0 * 0.85, lenMax: l1 * 0.85, jitter: 0.18 },
-      (x, y, r) => (inside(x, y) && r() < amt * (0.85 - tone(x, y)) ? cross[0] : null));
+    yield* hatchG(rng, box, { angle: base + 1.2, flow: crossFlow, gap: gap * 1.45, lenMin: l0 * 0.85, lenMax: l1 * 0.85, jitter: 0.2, curve: curve * 0.8 },
+      (x, y, r) => (inside(x, y) && r() < amt * (0.85 - tone(x, y)) ? cross[r() < 0.6 ? 0 : 1] : null));
   }
   if (o.wash !== false) yield* drawStylesG(g, wash);
   yield* drawStylesG(g, main);
@@ -406,12 +432,81 @@ function* pencilG(g, rng, box, inside, tone, pal, o = {}) {
 }
 const pencil = (...a) => run(pencilG(...a));
 
+// Scribbled fill: loose looping marks, for foliage, smoke, hair and deep shadow.
+function* scribbleG(g, rng, box, inside, tone, pal, o = {}) {
+  const n = pal.length, cell = o.cell ?? 15, step = o.step ?? 5, W = o.width ?? 1.9, A = o.alpha ?? 0.82;
+  const S = styles(pal.flatMap(c => [[c, W * 0.8, A * 0.9], [c, W * 1.25, A]]), 3);
+  let count = 0;
+  for (let y = box.y0 + rng() * cell; y < box.y1; y += cell * (0.75 + 0.3 * rng())) {
+    for (let x = box.x0 + rng() * cell; x < box.x1; x += cell * (0.75 + 0.3 * rng())) {
+      let px = x + (rng() - 0.5) * cell, py = y + (rng() - 0.5) * cell;
+      if (!inside(px, py)) continue;
+      let h = rng() * TAU;
+      const curl = (o.curl ?? 0.85) * (rng() < 0.5 ? -1 : 1), k = (o.loops ?? 9) + ((rng() * 6) | 0);
+      const ti = clamp(Math.floor((tone(px, py) + (rng() - 0.5) * 0.25) * n), 0, n - 1), st = S[ti * 2 + (rng() < 0.55 ? 0 : 1)];
+      for (let i = 0; i < k; i++) {
+        h += curl * (0.5 + 0.9 * rng());
+        const L = step * (0.7 + 0.6 * rng()), qx = px + Math.cos(h) * L, qy = py + Math.sin(h) * L * (o.squash ?? 1);
+        if (!inside(qx, qy)) { h += Math.PI * 0.8; continue; }
+        st.g[(rng() * 3) | 0].push(px, py, (px + qx) / 2 - Math.sin(h) * L * 0.3 * curl, (py + qy) / 2 + Math.cos(h) * L * 0.3 * curl, qx, qy);
+        px = qx; py = qy;
+      }
+    }
+    if (++count % 6 === 0) yield;
+  }
+  yield* drawStylesG(g, S);
+}
+// Stippled dots, for gravel, sand and weathered stone.
+function* stippleG(g, rng, box, inside, tone, pal, o = {}) {
+  const n = pal.length, N = Math.round((box.x1 - box.x0) * (box.y1 - box.y0) * (o.density ?? 0.012)), size = o.size ?? 2.2;
+  const paths = pal.map(() => []);
+  for (let i = 0; i < N; i++) {
+    const x = box.x0 + rng() * (box.x1 - box.x0), y = box.y0 + rng() * (box.y1 - box.y0);
+    if (!inside(x, y)) continue;
+    paths[clamp(Math.floor((tone(x, y) + (rng() - 0.5) * 0.3) * n), 0, n - 1)].push(x, y, size * (0.5 + rng()));
+    if (i % 20000 === 19999) yield;
+  }
+  paths.forEach((a, k) => {
+    g.fillStyle = pal[k]; g.globalAlpha = o.alpha ?? 0.8; g.beginPath();
+    for (let i = 0; i < a.length; i += 3) { g.moveTo(a[i] + a[i + 2], a[i + 1]); g.arc(a[i], a[i + 1], a[i + 2], 0, TAU); }
+    g.fill();
+  });
+  g.globalAlpha = 1;
+}
+// An inked contour with pencil pressure: the weight swells and thins along it and
+// the pencil lifts off now and then.
+function inkLine(g, pts, rng, color, width, alpha = 0.9, o = {}) {
+  if (pts.length < 2) return;
+  const jit = o.jit ?? 1.1, ph = rng() * 10, lift = o.lift ?? 0.035;
+  const P = pts.map(([x, y]) => [x + (rng() - 0.5) * jit, y + (rng() - 0.5) * jit]);
+  if (o.close) P.push(P[0]);
+  g.strokeStyle = color; g.lineCap = 'round'; g.lineJoin = 'round';
+  let i = 1;
+  while (i < P.length) {
+    const run2 = 2 + ((rng() * 4) | 0), w = width * (0.6 + 0.75 * (0.5 + 0.5 * Math.sin(i * 0.55 + ph)));
+    g.lineWidth = w; g.globalAlpha = alpha * (0.78 + 0.22 * rng());
+    g.beginPath(); g.moveTo(P[i - 1][0], P[i - 1][1]);
+    for (let k = 0; k < run2 && i < P.length; k++, i++) g.lineTo(P[i][0], P[i][1]);
+    g.stroke();
+    if (rng() < lift) i++;
+  }
+  g.globalAlpha = 1;
+}
+
+// A pencil line whose weight changes along its length.
 function sketchLine(g, pts, rng, jit, color, width, alpha, close = false) {
-  g.strokeStyle = color; g.lineWidth = width; g.globalAlpha = alpha;
-  g.beginPath();
-  pts.forEach(([x, y], i) => { const X = x + (rng() - 0.5) * jit, Y = y + (rng() - 0.5) * jit; i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
-  if (close) g.closePath();
-  g.stroke(); g.globalAlpha = 1;
+  if (pts.length < 2) return;
+  const P = pts.map(([x, y]) => [x + (rng() - 0.5) * jit, y + (rng() - 0.5) * jit]);
+  if (close) P.push(P[0]);
+  g.strokeStyle = color; g.lineCap = 'round'; g.lineJoin = 'round';
+  const chunk = Math.max(2, Math.ceil(P.length / 5));
+  for (let i = 0; i < P.length - 1; i += chunk) {
+    g.lineWidth = width * (0.7 + 0.6 * rng()); g.globalAlpha = alpha * (0.84 + 0.16 * rng());
+    g.beginPath(); g.moveTo(P[i][0], P[i][1]);
+    for (let k = i + 1; k <= Math.min(P.length - 1, i + chunk); k++) g.lineTo(P[k][0], P[k][1]);
+    g.stroke();
+  }
+  g.globalAlpha = 1;
 }
 function catmull(P, seg, closed = true) {
   const out = [], n = P.length, last = closed ? n : n - 1;
@@ -571,25 +666,27 @@ function makeVignette(g) {
 /* ------------------------ pencil textures for figures -------------------- */
 // Seamless hatch tiles laid over flat colour: 'grain' darkens (multiply), 'lift'
 // adds paper-coloured strokes, 'shade' is dense cross-hatching for shadows.
+// The tiles are drawn level and rotated per body part, so the hatching on an arm
+// runs with the arm and the coat's with the coat.
 const TILE = 160;
 function makeTile(seed, kind) {
   const c = mkCanvas(TILE, TILE), g = c.getContext('2d'), rng = mulberry32(seed);
   g.lineCap = 'round';
   const passes = {
-    grain: [[-0.95, 4.6, 8, 15, 'rgba(58,40,26,0.34)', 1.9], [0.62, 9, 7, 12, 'rgba(58,40,26,0.2)', 1.6]],
-    lift:  [[-0.95, 8.5, 5, 10, 'rgba(255,249,234,0.3)', 1.6]],
-    shade: [[0.62, 3.4, 8, 14, 'rgba(46,30,20,0.52)', 1.7], [-0.95, 4.8, 8, 14, 'rgba(46,30,20,0.32)', 1.7]],
+    grain: [[0, 4.6, 8, 16, 'rgba(58,40,26,0.34)', 1.9, 0.35], [1.25, 10, 6, 11, 'rgba(58,40,26,0.18)', 1.5, 0.2]],
+    lift:  [[0.1, 8.5, 5, 11, 'rgba(255,249,234,0.3)', 1.6, 0.4]],
+    shade: [[0, 3.6, 8, 15, 'rgba(46,30,20,0.5)', 1.7, 0.3], [1.1, 4.8, 8, 14, 'rgba(46,30,20,0.32)', 1.7, 0.3]],
   }[kind];
-  for (const [ang, gap, l0, l1, col, wid] of passes) {
+  for (const [ang, gap, l0, l1, col, wid, curve] of passes) {
     g.strokeStyle = col; g.lineWidth = wid; g.beginPath();
     const S = styles([[col, wid, 1]], 1);
-    hatch(rng, { x0: 0, y0: 0, x1: TILE, y1: TILE }, { angle: ang, gap, lenMin: l0, lenMax: l1, jitter: 0.2 }, () => S[0]);
+    hatch(rng, { x0: 0, y0: 0, x1: TILE, y1: TILE }, { angle: ang, gap, lenMin: l0, lenMax: l1, jitter: 0.25, curve }, () => S[0]);
     const a = S[0].g[0];
-    for (let i = 0; i < a.length; i += 4) {
+    for (let i = 0; i < a.length; i += 6) {
       for (const ox of [-TILE, 0, TILE]) for (const oy of [-TILE, 0, TILE]) {
-        const x0 = a[i] + ox, y0 = a[i + 1] + oy, x1 = a[i + 2] + ox, y1 = a[i + 3] + oy;
-        if (Math.max(x0, x1) < -2 || Math.min(x0, x1) > TILE + 2 || Math.max(y0, y1) < -2 || Math.min(y0, y1) > TILE + 2) continue;
-        g.moveTo(x0, y0); g.lineTo(x1, y1);
+        const x0 = a[i] + ox, y0 = a[i + 1] + oy, x1 = a[i + 4] + ox, y1 = a[i + 5] + oy;
+        if (Math.max(x0, x1) < -4 || Math.min(x0, x1) > TILE + 4 || Math.max(y0, y1) < -4 || Math.min(y0, y1) > TILE + 4) continue;
+        g.moveTo(x0, y0); g.quadraticCurveTo(a[i + 2] + ox, a[i + 3] + oy, x1, y1);
       }
     }
     g.stroke();
@@ -601,9 +698,13 @@ function makePatterns(g) {
   for (const k of Object.keys(PAT)) for (let v = 0; v < 3; v++) PAT[k].push(g.createPattern(makeTile(hash3(v, k.length, 5), k), 'repeat'));
 }
 const canMovePattern = typeof DOMMatrix !== 'undefined' && typeof CanvasPattern !== 'undefined' && !!CanvasPattern.prototype.setTransform;
-function pat(kind, tick, salt = 0) {
+// A pattern for this boil tick, shifted (and optionally turned `ang` radians).
+function pat(kind, tick, salt = 0, ang = null) {
   const p = PAT[kind][boilIndex(tick, 3, 40 + salt)];
-  if (canMovePattern) p.setTransform(new DOMMatrix([1, 0, 0, 1, hash3(tick, salt, 1) % TILE, hash3(tick, salt, 2) % TILE]));
+  if (canMovePattern) {
+    const m = new DOMMatrix([1, 0, 0, 1, hash3(tick, salt, 1) % TILE, hash3(tick, salt, 2) % TILE]);
+    p.setTransform(ang === null ? m : m.rotateSelf(ang * 180 / Math.PI));
+  }
   return p;
 }
 
@@ -791,8 +892,11 @@ function drawFigure(g, F, P, tick) {
   const X = p => [F.x + dir * p[0] * s, F.y + p[1] * s];
   const col = c => lit(c, L), farCol = c => mix(lit(c, L), L.ink, 0.26);
   const parts = [];
-  const add = (poly, color, o = {}) => { parts.push({ poly, color, ...o }); };
-  const limb = (A, B, wa, wb, color, far) => { const a = X(A), b = X(B); add(capsule(a, b, wa * s, wb * s), far ? farCol(color) : col(color), { shade: shadeSide(a, b, wa * s, wb * s, ld) }); };
+  // Each part carries the direction its pencil strokes run: along a limb, down the spine, around the head.
+  const spineA = Math.atan2(-Math.cos(P.lean), dir * Math.sin(P.lean)), headA = spineA + dir * (1.2 + 0.3 * rand3(F.seed, 1, 1));
+  let curA = spineA;
+  const add = (poly, color, o = {}) => { parts.push({ poly, color, ang: curA, ...o }); };
+  const limb = (A, B, wa, wb, color, far) => { const a = X(A), b = X(B); add(capsule(a, b, wa * s, wb * s), far ? farCol(color) : col(color), { shade: shadeSide(a, b, wa * s, wb * s, ld), ang: Math.atan2(b[1] - a[1], b[0] - a[0]) }); };
   const torsoPoly = (pts, skirts) => pts.map(([a, b]) => X(b < 0 && skirts ? tf(P, a + (a < -5 ? P.tails * 5 * (-b / 46) : 0), b, P.lean * 0.3) : tf(P, a, b)));
   const neck = tf(P, 1.5, 62), hRot = P.lean * 0.6 + P.head;
   const headC = add2(neck, rot([2.5, -21], P.lean + P.head * 0.7));
@@ -822,12 +926,13 @@ function drawFigure(g, F, P, tick) {
       if (O.gaiter) limb(lerp2(kn, an, 0.42), an, 15.5, 12.5, O.gaiter, far);
     }
     const shoe = [[-7, -3], [-8, 5], [17, 7], [20.5, 4], [14, -1.5], [4, -4.5]].map(p => X(add2(an, rot(p, fa))));
-    add(shoe, far ? farCol(O.shoes) : col(O.shoes));
+    add(shoe, far ? farCol(O.shoes) : col(O.shoes), { ang: dir > 0 ? fa : Math.PI - fa });
   };
   const musket = G => {
     const b = X(G.b), m = X(G.m), dx = m[0] - b[0], dy = m[1] - b[1], len = Math.hypot(dx, dy), u = [dx / len, dy / len];
     let n = [-u[1], u[0]]; if (n[1] < 0 || (Math.abs(n[1]) < 0.2 && n[0] * dir < 0)) n = [-n[0], -n[1]];
     const Q = (t, o) => [b[0] + u[0] * len * t + n[0] * o * s, b[1] + u[1] * len * t + n[1] * o * s];
+    curA = Math.atan2(u[1], u[0]);
     add([Q(0, -5.5), Q(0.3, -2.4), Q(0.88, -2.2), Q(0.88, 2), Q(0.37, 2.6), Q(0.3, 4.8), Q(0.23, 3), Q(0.11, 6.5), Q(0, 9)], col('#6d4424'), { shade: [Q(0, 2), Q(0.3, 0.6), Q(0.88, 0.4), Q(0.88, 2), Q(0.37, 2.6), Q(0.3, 4.8), Q(0.23, 3), Q(0.11, 6.5), Q(0, 9)] });
     add([Q(0.25, -3.6), Q(1, -3.1), Q(1, -0.7), Q(0.25, -0.7)], col('#70767b'));
     add([Q(0.27, -1), Q(0.35, -1), Q(0.35, 2.4), Q(0.27, 2.4)], col('#3c3a36'));
@@ -849,6 +954,7 @@ function drawFigure(g, F, P, tick) {
   if (O.box) add(torsoPoly(BOX), col(O.box));
   if (!F.seatedHide) leg(hipN, kneeN, P.nf, P.nfa, false);
   // Neck, stock and head.
+  curA = headA;
   limb(tf(P, 0, 56), add2(headC, rot([-1, 10], hRot)), 13, 12, O.skin, false);
   add(capsule(X(tf(P, -2, 62)), X(tf(P, 5, 64.5)), 12 * s, 12 * s), col(O.stock), { line: 0.8 });
   add(H(HEAD), col(O.skin), { shade: H([[-14, 1], [-9, 9], [-3, 14], [4, 16.5], [3, 11], [-5, 5], [-8, -2]]) });
@@ -862,6 +968,7 @@ function drawFigure(g, F, P, tick) {
     if (hat.brim) add(H(hat.brim), col(O.hatCol));
   }
   if (P.gun && !P.gunFront) musket(P.gun);
+  curA = spineA;
   if (P.sword) {
     const hnd = P.nh, a = P.sword.ang, b0 = add2(hnd, [Math.cos(a) * 4, Math.sin(a) * 4]), b1 = add2(hnd, [Math.cos(a) * 84, Math.sin(a) * 84]);
     add(capsule(X(b0), X(b1), 3.4 * s, 1.2 * s, 1), col('#b9bec0'), { line: 0.7 });
@@ -870,27 +977,36 @@ function drawFigure(g, F, P, tick) {
   if (!F.hideNearArm) arm(shN, elN, P.nh, false);
   if (P.gun && P.gunFront) musket(P.gun);
 
-  // Paint: flat colour, shadow cross-hatch, sketchy outline; then pencil grain over everything.
-  const U = new Path2D(), ink = L.ink, lw = 2.2;
-  const shadePat = pat('shade', tick, F.seed), rng = mulberry32(hash3(tick, F.seed, 5));
+  // Paint: flat colour, cross-hatched shadow turned to the part, an outline whose
+  // weight changes from part to part (and sometimes doesn't quite close); then
+  // pencil grain laid along each part's own direction.
+  const ink = L.ink, lw = 2.2, rng = mulberry32(hash3(tick, F.seed, 5));
+  const buckets = new Map(), slant = (F.seed % 2 ? 0.32 : -0.32);
   g.lineJoin = 'round'; g.lineCap = 'round';
   for (const pt of parts) {
     if (signedArea(pt.poly) < 0) pt.poly.reverse();
     g.fillStyle = pt.color; g.beginPath(); polyPath(g, pt.poly); g.fill();
-    polyPath(U, pt.poly);
+    const k = ((Math.round((pt.ang + slant) / (Math.PI / 6)) % 6) + 6) % 6;
+    if (!buckets.has(k)) buckets.set(k, new Path2D());
+    polyPath(buckets.get(k), pt.poly);
     if (pt.shade) {
-      g.globalCompositeOperation = 'multiply'; g.fillStyle = shadePat; g.globalAlpha = 0.9;
+      g.globalCompositeOperation = 'multiply'; g.fillStyle = pat('shade', tick, F.seed, pt.ang + 0.9); g.globalAlpha = 0.9;
       g.beginPath(); polyPath(g, pt.shade); g.fill();
       g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
     }
     if (pt.line !== 0) {
-      g.strokeStyle = ink; g.lineWidth = lw * (pt.line || 1); g.globalAlpha = 0.9; g.beginPath();
+      const w = rng();
+      g.strokeStyle = ink; g.lineWidth = lw * (pt.line || 1) * (w < 0.25 ? 0.75 : w < 0.8 ? 1 : 1.3); g.globalAlpha = 0.82 + 0.14 * rng(); g.beginPath();
       pt.poly.forEach(([x, y], i) => { const X2 = x + (rng() - 0.5) * 1.3, Y2 = y + (rng() - 0.5) * 1.3; i ? g.lineTo(X2, Y2) : g.moveTo(X2, Y2); });
-      g.closePath(); g.stroke(); g.globalAlpha = 1;
+      if (rng() > 0.18) g.closePath();
+      g.stroke(); g.globalAlpha = 1;
     }
   }
-  g.globalCompositeOperation = 'multiply'; g.fillStyle = pat('grain', tick, F.seed + 3); g.fill(U);
-  g.globalCompositeOperation = 'source-over'; g.fillStyle = pat('lift', tick, F.seed + 7); g.fill(U);
+  for (const [k, path] of buckets) {
+    const a = k * Math.PI / 6;
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = pat('grain', tick, F.seed + 3 + k, a); g.fill(path);
+    g.globalCompositeOperation = 'source-over'; g.fillStyle = pat('lift', tick, F.seed + 7 + k, a + 0.25); g.fill(path);
+  }
   // Face details and trims on top.
   const hp = p => X(add2(headC, rot(p, hRot)));
   g.strokeStyle = ink; g.lineWidth = 2.2; g.beginPath();
@@ -921,10 +1037,10 @@ function* flagBuild(g, rng, kind) {
   if (kind === 'us' || kind === 'union') {
     const cw = w * 0.42, ch = h * 7 / 13;
     const inCanton = (x, y) => x < cw && y < ch;
-    yield* pencilG(g, rng, box, (x, y) => !inCanton(x, y) && stripe(y) % 2 === 0, tone, RED, { gap: 3.4, len: [7, 13], washAlpha: 0.4 });
-    yield* pencilG(g, rng, box, (x, y) => !inCanton(x, y) && stripe(y) % 2 === 1, tone, WHITE, { gap: 3.8, len: [7, 13], cross: false });
+    yield* pencilG(g, rng, box, (x, y) => !inCanton(x, y) && stripe(y) % 2 === 0, tone, RED, { flow: FLOW.noise(0.03, 0.14, 0.01, 3), curve: 0.25, gap: 3.4, len: [9, 17], washAlpha: 0.4, crossOff: 0.7 });
+    yield* pencilG(g, rng, box, (x, y) => !inCanton(x, y) && stripe(y) % 2 === 1, tone, WHITE, { flow: FLOW.noise(-0.03, 0.14, 0.01, 4), curve: 0.25, gap: 3.8, len: [9, 17], cross: false });
     if (kind === 'us') {
-      yield* pencilG(g, rng, { x0: 0, y0: 0, x1: cw, y1: ch }, () => true, (x, y) => tone(x, y) * 0.8, BLUE, { gap: 3.2, len: [7, 12], washAlpha: 0.45 });
+      yield* pencilG(g, rng, { x0: 0, y0: 0, x1: cw, y1: ch }, () => true, (x, y) => tone(x, y) * 0.8, BLUE, { angle: 0.75, wander: 0.5, curve: 0.3, gap: 3.2, len: [7, 12], washAlpha: 0.45 });
       g.fillStyle = '#f5f0e2';
       for (let i = 0; i < 13; i++) {
         const a = -Math.PI / 2 + i * TAU / 13, cx = cw / 2 + Math.cos(a) * ch * 0.34, cy = ch / 2 + Math.sin(a) * ch * 0.34;
@@ -935,7 +1051,7 @@ function* flagBuild(g, rng, kind) {
       g.globalAlpha = 1;
     } else {
       // The 1606 Union: St Andrew's white saltire and St George's red cross on blue.
-      yield* pencilG(g, rng, { x0: 0, y0: 0, x1: cw, y1: ch }, () => true, (x, y) => tone(x, y) * 0.8, BLUE, { gap: 3.2, len: [7, 12] });
+      yield* pencilG(g, rng, { x0: 0, y0: 0, x1: cw, y1: ch }, () => true, (x, y) => tone(x, y) * 0.8, BLUE, { angle: 0.75, wander: 0.5, curve: 0.3, gap: 3.2, len: [7, 12] });
       g.save(); g.beginPath(); g.rect(0, 0, cw, ch); g.clip();
       g.strokeStyle = '#f2ede0'; g.lineWidth = ch * 0.2; g.beginPath(); g.moveTo(0, 0); g.lineTo(cw, ch); g.moveTo(cw, 0); g.lineTo(0, ch); g.stroke();
       g.fillStyle = '#f2ede0'; g.fillRect(cw / 2 - ch * 0.17, 0, ch * 0.34, ch); g.fillRect(0, ch / 2 - ch * 0.17, cw, ch * 0.34);
@@ -951,7 +1067,7 @@ function* flagBuild(g, rng, kind) {
     g.stroke();
   } else {
     // French royal white, with a scatter of gold lilies.
-    yield* pencilG(g, rng, box, () => true, tone, WHITE, { gap: 3.8, len: [7, 13], crossAmt: 0.5 });
+    yield* pencilG(g, rng, box, () => true, tone, WHITE, { flow: FLOW.noise(-1.45, 0.3, 0.008, 9), curve: 0.4, gap: 3.8, len: [8, 16], crossAmt: 0.5 });
     g.fillStyle = '#c9a44a'; g.globalAlpha = 0.9;
     for (const [fx, fy] of [[0.25, 0.3], [0.62, 0.28], [0.44, 0.68], [0.82, 0.66]]) {
       const x = fx * w, y = fy * h;
@@ -1000,7 +1116,7 @@ function* puffBuild(g, rng, i) {
   for (let k = 0; k < 7; k++) blobs.push([(r0() - 0.5) * 120, (r0() - 0.5) * 70 - 10, 40 + r0() * 40]);
   const inside = (x, y) => blobs.some(([bx, by, br]) => (x - bx) ** 2 + (y - by) ** 2 < br * br * (0.8 + 0.3 * rng()));
   const tone = (x, y) => clamp(0.55 - y / 180 - x / 400 + 0.25 * vnoise2(x * 0.02, y * 0.02, i));
-  yield* pencilG(g, rng, { x0: -128, y0: -128, x1: 128, y1: 128 }, inside, tone, ['#77736d', '#96918a', '#b4afa6', '#d2cdc3', '#e8e4da'], { gap: 4.4, len: [9, 17], crossAmt: 0.6, washAlpha: 0.3 });
+  yield* pencilG(g, rng, { x0: -128, y0: -128, x1: 128, y1: 128 }, inside, tone, ['#77736d', '#96918a', '#b4afa6', '#d2cdc3', '#e8e4da'], { flow: FLOW.wobble(FLOW.around(0, -10), 0.6, 0.02, i), curve: 0.7, gap: 4.4, len: [9, 18], crossAmt: 0.6, washAlpha: 0.3 });
 }
 // A drifting smoke plume made of sprite puffs, seeded so it is the same on every play.
 function drawSmoke(g, sprites, tick, x, y, age, o = {}) {
@@ -1102,7 +1218,7 @@ const CARD = new BoilLayer({
     };
     g.fillStyle = '#efe2c2'; g.beginPath(); g.roundRect ? g.roundRect(0, 0, 960, 300, r) : g.rect(0, 0, 960, 300); g.fill();
     yield* pencilG(g, rng, { x0: 0, y0: 0, x1: 960, y1: 300 }, inside, (x, y) => clamp(0.72 + 0.2 * fbm(x * 0.008, y * 0.01, 5) - 0.25 * Math.pow(Math.max(Math.abs(x - 480) / 480, Math.abs(y - 150) / 150), 6)),
-      ['#b99d6c', '#cdb488', '#dcc7a0', '#e8d8b6', '#f2e7cc'], { gap: 4.2, len: [10, 18], washAlpha: 0.25, crossAmt: 0.5 });
+      ['#b99d6c', '#cdb488', '#dcc7a0', '#e8d8b6', '#f2e7cc'], { flow: FLOW.noise(-0.4, 1.3, 0.005, 3), curve: 0.3, gap: 4.2, len: [10, 18], washAlpha: 0.25, crossAmt: 0.5 });
   },
 });
 
@@ -1179,7 +1295,8 @@ function* buildMap(g, rng) {
   g.fillStyle = '#d9c7a0'; g.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
   // Sea and lakes: darker along the shore.
   yield* pencilG(g, rng, box, (x, y) => !isLand(x, y), (x, y) => clamp(0.18 + D.at(x, y) / 230 + 0.2 * fbm(x * 0.005, y * 0.005, 3)),
-    ['#2c4756', '#3f5b67', '#55707a', '#6d878d', '#8aa0a1', '#a6b8b2'], { angle: -0.2, gap: 4.4, len: [14, 26], crossAmt: 0.6 });
+    ['#2c4756', '#3f5b67', '#55707a', '#6d878d', '#8aa0a1', '#a6b8b2'],
+    { flow: FLOW.mix((x, y) => D.ang(x, y), FLOW.noise(0.04, 0.22, 0.003, 11), (x, y) => clamp(D.at(x, y) / 150)), curve: 0.35, gap: 4.4, len: [16, 30], crossOff: 0.5, crossAmt: 0.6 });
   // Engraver's water lines echoing the coast.
   const ring = styles([['#29434f', 2.0, 0.72]], 4);
   yield* hatchG(rng, box, { angle: 0, gap: 3, lenMin: 6, lenMax: 11, jitter: 0.04, spacing: 0.5, angleAt: (x, y) => D.ang(x, y) }, (x, y, r) => {
@@ -1191,8 +1308,11 @@ function* buildMap(g, rng) {
   yield* drawStylesG(g, ring);
   // Land: parchment tones, darker at the shore and along the mountains.
   const landTone = (x, y) => clamp(0.66 + 0.2 * fbm(x * 0.004, y * 0.004, 8) - 0.34 * clamp(1 - D.at(x, y) / 16) - 0.3 * clamp(1 - distToPolyline(x, y, RIDGE) / 46));
-  yield* pencilG(g, rng, box, isLand, landTone, ['#7d5d34', '#9a7746', '#b69358', '#caab70', '#dbc28c', '#e7d3a6'], { gap: 4.3, len: [10, 19], crossAmt: 0.7 });
-  yield* pencilG(g, rng, box, (x, y) => isLand(x, y) && fbm(x * 0.007, y * 0.007, 21) > 0.12, landTone, ['#5e6a3a', '#76824a', '#8e975c', '#a6ab72'], { gap: 5.5, len: [9, 16], density: 0.45, wash: false, cross: false });
+  // Coloured by hand: strokes hug the shore, and inland they wander in patches.
+  yield* pencilG(g, rng, box, isLand, landTone, ['#7d5d34', '#9a7746', '#b69358', '#caab70', '#dbc28c', '#e7d3a6'],
+    { flow: FLOW.mix((x, y) => D.ang(x, y), FLOW.noise(-0.5, 1.2, 0.0028, 5), (x, y) => clamp(D.at(x, y) / 45)), curve: 0.3, gap: 4.3, len: [10, 19], crossAmt: 0.7 });
+  // Forests as clusters of little scribbled loops, the way old maps mark woodland.
+  yield* scribbleG(g, rng, box, (x, y) => isLand(x, y) && D.at(x, y) > 10 && fbm(x * 0.007, y * 0.007, 21) > 0.12, landTone, ['#4f5c30', '#66743f', '#7e8a52'], { cell: 12, step: 3.6, loops: 6, width: 1.5, alpha: 0.6 });
   // Lake shores, rivers.
   for (const L of LAKES) sketchLine(g, L.concat([L[0]]), rng, 1.2, '#2c3f48', 2.2, 0.85);
   g.lineCap = 'round';
@@ -1236,12 +1356,12 @@ const MAPSHIP = new BoilLayer({
   name: 'mapship', box: { x0: -80, y0: -86, x1: 80, y1: 40 }, res: 1.2, seed: 102,
   build: function* (g, rng) {
     const hull = [[-62, 6], [60, 4], [70, -6], [50, 22], [-50, 24], [-66, 8]];
-    yield* pencilG(g, rng, bboxOf(hull), (x, y) => inPoly(hull, x, y), (x, y) => clamp(0.6 - (y - 6) / 30), ['#3a2414', '#5a3a20', '#7a5230'], { gap: 2.6, len: [4, 8] });
+    yield* pencilG(g, rng, bboxOf(hull), (x, y) => inPoly(hull, x, y), (x, y) => clamp(0.6 - (y - 6) / 30), ['#3a2414', '#5a3a20', '#7a5230'], { angle: 0.04, wander: 0.08, gap: 2.6, len: [5, 10] });
     sketchLine(g, hull.concat([hull[0]]), rng, 0.8, '#1f140c', 2, 0.95);
     const sails = [[-38, -2, 30, 58], [-2, -4, 34, 72], [34, -2, 26, 50]];
     for (const [sx, sy, sw, sh] of sails) {
       const P = [[sx - sw / 2, sy - sh], [sx + sw / 2 + 4, sy - sh + 2], [sx + sw / 2 + 8, sy - 6], [sx - sw / 2 + 2, sy - 4]];
-      yield* pencilG(g, rng, bboxOf(P), (x, y) => inPoly(P, x, y), (x, y) => clamp(0.8 - (x - sx) / 60), ['#b8ab8c', '#d8ceb2', '#efe7d2'], { gap: 2.6, len: [4, 8], cross: false });
+      yield* pencilG(g, rng, bboxOf(P), (x, y) => inPoly(P, x, y), (x, y) => clamp(0.8 - (x - sx) / 60), ['#b8ab8c', '#d8ceb2', '#efe7d2'], { angle: -1.52, wander: 0.15, curve: 0.5, gap: 2.6, len: [5, 9], cross: false });
       sketchLine(g, P.concat([P[0]]), rng, 0.8, '#3a2a1c', 1.6, 0.9);
       sketchLine(g, [[sx, sy], [sx, sy - sh - 12]], rng, 0.6, '#2a1a10', 2.2, 0.95);
     }
@@ -1473,17 +1593,17 @@ function* buildTeaSky(g, rng) {
   const md = (x, y) => Math.hypot(x - M.x, y - M.y);
   yield* pencilG(g, rng, box, (x, y) => y < skylineTop(x) && md(x, y) > M.r + 3,
     (x, y) => clamp(0.1 + 0.3 * (y / 1050) + 0.55 * Math.exp(-(md(x, y) - M.r) / 150) + 0.1 * fbm(x * 0.004, y * 0.006, 12)), SKY_NIGHT,
-    { angle: -0.28, gap: 4.4, len: [14, 28], crossAmt: 0.7, washAlpha: 0.38 });
+    { flow: FLOW.mix(FLOW.noise(-0.06, 0.3, 0.0022, 2), FLOW.around(M.x, M.y), (x, y) => clamp(1 - (md(x, y) - M.r) / 230)), curve: 0.4, gap: 4.4, len: [16, 34], crossOff: 0.55, crossAmt: 0.7, washAlpha: 0.38 });
   // Moonlit cloud wisps.
   const cl = styles([['#5c6890', 2.6, 0.5], ['#8792b2', 2.4, 0.45]], 4);
-  hatch(rng, box, { angle: -0.05, gap: 5, lenMin: 20, lenMax: 44 }, (x, y, r) => {
+  hatch(rng, box, { angle: -0.05, flow: FLOW.noise(-0.04, 0.12, 0.004, 31), curve: 0.45, gap: 5, lenMin: 20, lenMax: 44 }, (x, y, r) => {
     const v = fbm(x * 0.004, y * 0.02, 31) + 0.15 * Math.sin(x * 0.004);
     return y < 780 && y < skylineTop(x) - 40 && md(x, y) > M.r + 10 && v > 0.3 && r() < 0.7 ? cl[v > 0.45 ? 1 : 0] : null;
   });
   yield* drawStylesG(g, cl);
   yield* pencilG(g, rng, { x0: M.x - M.r, y0: M.y - M.r, x1: M.x + M.r, y1: M.y + M.r }, (x, y) => md(x, y) < M.r,
     (x, y) => clamp(0.85 - 0.25 * ((x - M.x) + (y - M.y)) / M.r / 2 - (fbm(x * 0.05, y * 0.05, 3) > 0.3 ? 0.35 : 0)), ['#9d9679', '#c2ba98', '#dcd4b2', '#eee7cb', '#f8f3e0'],
-    { gap: 3.1, len: [6, 11], cross: false, washAlpha: 0.5 });
+    { flow: FLOW.around(M.x, M.y), curve: 0.55, gap: 3.1, len: [7, 13], cross: false, washAlpha: 0.5 });
   const rim = []; for (let a = 0; a <= TAU + 0.1; a += 0.1) rim.push([M.x + Math.cos(a) * M.r, M.y + Math.sin(a) * M.r]);
   sketchLine(g, rim, rng, 1.2, '#f4ecd0', 2.4, 0.8);
   // Stars.
@@ -1497,7 +1617,7 @@ function* buildTeaSky(g, rng) {
   g.stroke();
   // Town silhouette with a few lit windows.
   const town = (x, y) => y >= skylineTop(x) && y < 1060;
-  yield* pencilG(g, rng, { x0: -30, y0: 620, x1: 1110, y1: 1060 }, town, (x, y) => clamp(0.25 + 0.2 * fbm(x * 0.02, y * 0.02, 5)), ['#07080f', '#0d0f1c', '#141729', '#1c2036'], { gap: 3.8, len: [8, 15] });
+  yield* pencilG(g, rng, { x0: -30, y0: 620, x1: 1110, y1: 1060 }, town, (x, y) => clamp(0.25 + 0.2 * fbm(x * 0.02, y * 0.02, 5)), ['#07080f', '#0d0f1c', '#141729', '#1c2036'], { angle: -1.57, wander: 0.12, curve: 0.1, gap: 3.8, len: [9, 18], crossOff: 1.57 });
   g.fillStyle = '#e8b458';
   for (const b of TEA.bld) b.lit.forEach((v, k) => { if (v < 0.35) { g.globalAlpha = 0.85; g.fillRect(b.x + 8 + (k % 2) * (b.w - 28), b.top + 22 + Math.floor(k / 2) * 30, 10, 13); } });
   g.globalAlpha = 1;
@@ -1508,7 +1628,7 @@ function* buildTeaWater(g, rng) {
   const box = { x0: -30, y0: 1030, x1: 1110, y1: 1950 }, M = TEA.MOON;
   const col = (x, y) => { const w = 36 + (y - 1040) * 0.14; return Math.exp(-(((x - M.x) / w) ** 2)) * (0.55 + 0.45 * Math.sin(y * 0.21 + Math.sin(x * 0.05) * 2)); };
   yield* pencilG(g, rng, box, (x, y) => y > 1044 + 2 * Math.sin(x * 0.05), (x, y) => clamp(0.14 + 0.1 * fbm(x * 0.01, y * 0.03, 8) + 0.1 * (1 - (y - 1040) / 900) + 0.75 * col(x, y)),
-    ['#070b17', '#0d1426', '#141d36', '#1d2a48', '#2d3d60', '#556688', '#9aa8bf', '#dfe3de'], { angle: -0.03, gap: 4.2, len: [16, 38], crossAmt: 0.5, crossAngle: 0.35 });
+    ['#070b17', '#0d1426', '#141d36', '#1d2a48', '#2d3d60', '#556688', '#9aa8bf', '#dfe3de'], { flow: FLOW.noise(0, 0.1, 0.005, 6), curve: 0.45, gap: 4.2, len: [16, 42], crossAmt: 0.5, crossAngle: 0.3 });
   // Far wharf and pilings.
   g.fillStyle = '#05070d'; g.fillRect(-30, 1036, 1140, 12);
   g.strokeStyle = '#05070d'; g.lineWidth = 4; g.beginPath();
@@ -1522,7 +1642,7 @@ function* buildShipBack(g, rng, i) {
   sketchLine(g, [[120, 1002], [-20, 902]], rng, 0.8, W8[1], 11, 1); sketchLine(g, [[120, 1002], [-20, 902]], rng, 0.8, inkN, 2, 0.8);
   for (const m of TEA.MASTS) {
     const P = [[m.x - m.w / 2, 1140], [m.x + m.w / 2, 1140], [m.x + m.w * 0.28, m.top], [m.x - m.w * 0.28, m.top]];
-    yield* pencilG(g, rng, bboxOf(P, 2), (x, y) => inPoly(P, x, y), (x) => clamp(0.3 + (x - m.x) / m.w * 0.5 + 0.2), W8, { gap: 3, len: [6, 12] });
+    yield* pencilG(g, rng, bboxOf(P, 2), (x, y) => inPoly(P, x, y), (x) => clamp(0.3 + (x - m.x) / m.w * 0.5 + 0.2), W8, { angle: -1.57, wander: 0.05, curve: 0.08, gap: 3, len: [10, 22] });
     sketchLine(g, P.concat([P[0]]), rng, 0.8, inkN, 2, 0.85);
     const h = 1140 - m.top;
     // Yards with furled sails.
@@ -1533,7 +1653,7 @@ function* buildShipBack(g, rng, i) {
       const bundle = [];
       for (let k = 0; k <= 16; k++) { const u = k / 16; bundle.push([m.x - hw * 0.94 + 2 * hw * 0.94 * u, y - 5 - 9 * Math.sin(u * Math.PI) * (0.7 + 0.3 * Math.sin(u * 20))]); }
       bundle.push([m.x + hw * 0.94, y - 3], [m.x - hw * 0.94, y - 3]);
-      yield* pencilG(g, rng, bboxOf(bundle, 2), (x, yy) => inPoly(bundle, x, yy), (x, yy) => clamp(0.8 - (yy - y + 14) / 20), ['#3f4660', '#5d6582', '#8890a8', '#b4b8c4'], { gap: 2.4, len: [4, 8], cross: false, wash: false });
+      yield* pencilG(g, rng, bboxOf(bundle, 2), (x, yy) => inPoly(bundle, x, yy), (x, yy) => clamp(0.8 - (yy - y + 14) / 20), ['#3f4660', '#5d6582', '#8890a8', '#b4b8c4'], { angle: 0, wander: 0.4, curve: 0.8, gap: 2.4, len: [5, 10], cross: false, wash: false });
       sketchLine(g, bundle, rng, 0.6, inkN, 1.6, 0.8);
       sketchLine(g, Y.concat([Y[0]]), rng, 0.5, inkN, 1.4, 0.8);
     }
@@ -1564,10 +1684,10 @@ function* buildShipFront(g, rng) {
   hull.push([1010, 1060], [996, 1250], [980, 1350], [240, 1350], [170, 1280], [128, 1150]);
   const HULL = ['#0c0908', '#140f0d', '#1d1612', '#271e18', '#342820', '#46382c'].map(c => lit(c, { ...L, amt: 0.25, dark: 0.05 }));
   yield* pencilG(g, rng, bboxOf(hull, 2), (x, y) => inPoly(hull, x, y),
-    (x, y) => clamp(0.45 - 0.3 * (y - rail(x)) / 260 + 0.12 * fbm(x * 0.02, y * 0.05, 9) + 0.25 * Math.exp(-(((y - rail(x) - 6) / 10) ** 2))), HULL, { angle: -0.08, gap: 3.6, len: [12, 28], crossAmt: 0.6 });
+    (x, y) => clamp(0.45 - 0.3 * (y - rail(x)) / 260 + 0.12 * fbm(x * 0.02, y * 0.05, 9) + 0.25 * Math.exp(-(((y - rail(x) - 6) / 10) ** 2))), HULL, { flow: FLOW.wobble(FLOW.along(rail), 0.05, 0.01, 4), curve: 0.15, gap: 3.6, len: [16, 38], crossOff: 1.3, crossAmt: 0.6 });
   // Wale stripe, planking, gunports.
   const wale = []; for (let x = 118; x <= 1008; x += 10) wale.push([x, rail(x) + 42]); for (let x = 1008; x >= 118; x -= 10) wale.push([x, rail(x) + 62]);
-  yield* pencilG(g, rng, bboxOf(wale, 2), (x, y) => inPoly(wale, x, y), (x, y) => clamp(0.5 + 0.2 * fbm(x * 0.03, y * 0.1, 3)), ['#3d3322', '#524530', '#6a5a3c', '#83714a'].map(c => lit(c, { ...L, amt: 0.25 })), { angle: -0.05, gap: 2.8, len: [8, 18] });
+  yield* pencilG(g, rng, bboxOf(wale, 2), (x, y) => inPoly(wale, x, y), (x, y) => clamp(0.5 + 0.2 * fbm(x * 0.03, y * 0.1, 3)), ['#3d3322', '#524530', '#6a5a3c', '#83714a'].map(c => lit(c, { ...L, amt: 0.25 })), { flow: FLOW.along(rail), curve: 0.1, gap: 2.8, len: [12, 26] });
   g.strokeStyle = '#06050a'; g.lineWidth = 1.6; g.globalAlpha = 0.8; g.beginPath();
   for (let k = 1; k < 16; k++) { for (let x = 130; x <= 1000; x += 10) { const y = rail(x) + 14 * k + (k > 3 ? 20 : 0); if (y > 1345) break; x === 130 ? g.moveTo(x, y) : g.lineTo(x, y); } }
   g.stroke(); g.globalAlpha = 1;
@@ -1594,9 +1714,9 @@ const TEA_LAYERS = {
     build: function* (g, rng) {
       const L = { ...LIGHTS.night, amt: 0.3, dark: 0.08 };
       const front = [[-44, -18], [26, -18], [26, 38], [-44, 38]], top = [[-44, -18], [-26, -38], [44, -38], [26, -18]], side = [[26, -18], [44, -38], [44, 20], [26, 38]];
-      yield* pencilG(g, rng, bboxOf(front), (x, y) => inPoly(front, x, y), (x, y) => clamp(0.55 + 0.2 * fbm(x * 0.1, y * 0.3, 2)), ['#2f1d10', '#4a2e18', '#6a4424', '#875a30'].map(c => lit(c, L)), { gap: 2.4, len: [5, 10] });
-      yield* pencilG(g, rng, bboxOf(top), (x, y) => inPoly(top, x, y), () => 0.8, ['#5a3a20', '#7a5230', '#9a6c40', '#b8885a'].map(c => lit(c, L)), { gap: 2.4, len: [5, 10], cross: false });
-      yield* pencilG(g, rng, bboxOf(side), (x, y) => inPoly(side, x, y), () => 0.25, ['#1f130a', '#34210f', '#4c3018'].map(c => lit(c, L)), { gap: 2.4, len: [5, 10] });
+      yield* pencilG(g, rng, bboxOf(front), (x, y) => inPoly(front, x, y), (x, y) => clamp(0.55 + 0.2 * fbm(x * 0.1, y * 0.3, 2)), ['#2f1d10', '#4a2e18', '#6a4424', '#875a30'].map(c => lit(c, L)), { angle: 0, wander: 0.06, curve: 0.1, gap: 2.4, len: [8, 16] });
+      yield* pencilG(g, rng, bboxOf(top), (x, y) => inPoly(top, x, y), () => 0.8, ['#5a3a20', '#7a5230', '#9a6c40', '#b8885a'].map(c => lit(c, L)), { angle: -0.85, wander: 0.1, gap: 2.4, len: [6, 11], cross: false });
+      yield* pencilG(g, rng, bboxOf(side), (x, y) => inPoly(side, x, y), () => 0.25, ['#1f130a', '#34210f', '#4c3018'].map(c => lit(c, L)), { angle: -1.57, wander: 0.08, gap: 2.4, len: [6, 11] });
       g.strokeStyle = lit('#1a0f08', L); g.lineWidth = 1.4; g.beginPath();
       for (const y of [0, 19]) { g.moveTo(-44, y); g.lineTo(26, y); }
       g.stroke();
@@ -1741,26 +1861,28 @@ function* buildLexBg(g, rng) {
   const sun = [990, 870];
   yield* pencilG(g, rng, box, (x, y) => y < lexHorizon(x) + 6,
     (x, y) => clamp(0.1 + 0.82 * smooth(clamp(y / 920)) + 0.28 * Math.exp(-Math.hypot(x - sun[0], y - sun[1]) / 260) + 0.1 * fbm(x * 0.003, y * 0.008, 4)), SKY_DAWN,
-    { angle: -0.24, gap: 4.6, len: [16, 30], crossAmt: 0.4, washAlpha: 0.34 });
+    { flow: FLOW.mix(FLOW.noise(-0.05, 0.28, 0.0022, 14), FLOW.radial(sun[0], sun[1]), (x, y) => 0.8 * Math.exp(-Math.hypot(x - sun[0], y - sun[1]) / 300)), curve: 0.4, gap: 4.6, len: [20, 40], crossOff: 0.5, crossAmt: 0.4, washAlpha: 0.34 });
   const cl = styles([['#b69bab', 2.6, 0.5], ['#e9b9a0', 2.4, 0.55], ['#f2d2b5', 2.2, 0.5]], 4);
-  hatch(rng, box, { angle: -0.06, gap: 5, lenMin: 22, lenMax: 48 }, (x, y, r) => {
+  hatch(rng, box, { angle: -0.06, flow: FLOW.noise(-0.05, 0.14, 0.004, 17), curve: 0.5, gap: 5, lenMin: 22, lenMax: 48 }, (x, y, r) => {
     const v = fbm(x * 0.0035, y * 0.018, 17) + 0.1 * Math.sin(x * 0.005);
     return y > 120 && y < 720 && v > 0.28 && r() < 0.75 ? cl[v > 0.42 ? (y > 450 ? 2 : 1) : 0] : null;
   });
   yield* drawStylesG(g, cl);
   // Far trees in first leaf, and a big elm.
   const inTrees = (x, y) => y > 700 && y < lexHorizon(x) + 30 && LEX_TREES.some(([tx, ty, tr]) => (x - tx) ** 2 + ((y - ty) * 1.3) ** 2 < tr * tr);
-  yield* pencilG(g, rng, { x0: -180, y0: 700, x1: 1130, y1: 1000 }, inTrees, (x, y) => clamp(0.35 + 0.35 * ((lexHorizon(x) - y) / 120) + 0.15 * fbm(x * 0.02, y * 0.02, 7)), ['#3b4a34', '#4d5d3f', '#63734c', '#7d8a5e', '#9aa377'], { gap: 3.8, len: [7, 13] });
+  yield* pencilG(g, rng, { x0: -180, y0: 700, x1: 1130, y1: 1000 }, inTrees, (x, y) => clamp(0.35 + 0.35 * ((lexHorizon(x) - y) / 120) + 0.15 * fbm(x * 0.02, y * 0.02, 7)), ['#3b4a34', '#4d5d3f', '#63734c', '#7d8a5e', '#9aa377'], { flow: FLOW.noise(-1.3, 0.9, 0.015, 7), curve: 0.6, gap: 4.4, len: [6, 12], density: 0.75, cross: false });
+  yield* scribbleG(g, rng, { x0: -180, y0: 700, x1: 1130, y1: 1000 }, inTrees, (x, y) => clamp(0.3 + 0.35 * ((lexHorizon(x) - y) / 120) + 0.15 * fbm(x * 0.02, y * 0.02, 7)), ['#34422e', '#4a5a3c', '#63734c'], { cell: 11, step: 4, loops: 8, width: 1.7, alpha: 0.7 });
   const inElm = (x, y) => { const d = Math.hypot(x - ELM.x, (y - ELM.y) * 1.15); return d < ELM.r * (0.82 + 0.18 * vnoise(Math.atan2(y - ELM.y, x - ELM.x) * 3, 5)); };
   const trunk = [[924, 1010], [952, 1010], [946, 760], [980, 690], [962, 684], [940, 730], [912, 690], [898, 698], [930, 770]];
-  yield* pencilG(g, rng, bboxOf(trunk), (x, y) => inPoly(trunk, x, y), (x) => clamp(0.3 + (938 - x) / 60), ['#2d2520', '#3f342b', '#554638', '#6c5a48'], { gap: 3, len: [8, 14] });
-  yield* pencilG(g, rng, { x0: ELM.x - ELM.r, y0: ELM.y - ELM.r, x1: 1130, y1: ELM.y + ELM.r }, inElm, (x, y) => clamp(0.55 - (y - ELM.y) / 400 - (x - ELM.x) / 700 + 0.25 * fbm(x * 0.02, y * 0.02, 9)), ['#34452d', '#465a36', '#5d7240', '#778c52', '#94a56a'], { gap: 3.8, len: [7, 13] });
+  yield* pencilG(g, rng, bboxOf(trunk), (x, y) => inPoly(trunk, x, y), (x) => clamp(0.3 + (938 - x) / 60), ['#2d2520', '#3f342b', '#554638', '#6c5a48'], { angle: -1.57, wander: 0.12, curve: 0.35, gap: 3, len: [10, 22] });
+  yield* pencilG(g, rng, { x0: ELM.x - ELM.r, y0: ELM.y - ELM.r, x1: 1130, y1: ELM.y + ELM.r }, inElm, (x, y) => clamp(0.55 - (y - ELM.y) / 400 - (x - ELM.x) / 700 + 0.25 * fbm(x * 0.02, y * 0.02, 9)), ['#34452d', '#465a36', '#5d7240', '#778c52', '#94a56a'], { flow: FLOW.wobble(FLOW.around(ELM.x, ELM.y, 1.15), 0.7, 0.03, 9), curve: 0.7, gap: 4.4, len: [7, 13], density: 0.8 });
+  yield* scribbleG(g, rng, { x0: ELM.x - ELM.r, y0: ELM.y - ELM.r, x1: 1130, y1: ELM.y + ELM.r }, inElm, (x, y) => clamp(0.5 - (y - ELM.y) / 400 - (x - ELM.x) / 700 + 0.25 * fbm(x * 0.02, y * 0.02, 9)), ['#2c3b26', '#3e5030', '#56693b', '#6f8449'], { cell: 12, step: 4.5, loops: 9, width: 1.8, alpha: 0.72 });
   // The meetinghouse: white clapboard, grey shingles, a belfry and spire.
   const M = MEETING, wallTone = (x, y) => clamp(0.8 - (y - 772) / 900 + 0.1 * Math.sin(y * 0.55));
-  yield* pencilG(g, rng, bboxOf(M.wall), (x, y) => inPoly(M.wall, x, y), wallTone, ['#8d94a0', '#aab0b8', '#c9cbc9', '#e0ddd2', '#efe9dc'], { angle: -0.05, gap: 3.2, len: [12, 24], crossAmt: 0.4 });
-  yield* pencilG(g, rng, bboxOf(M.tower), (x, y) => inPoly(M.tower, x, y), (x) => clamp(0.45 + (x - 148) / 140), ['#7b838f', '#9aa1aa', '#bcbfbf', '#d9d6cc'], { angle: -0.05, gap: 3.2, len: [10, 18] });
-  yield* pencilG(g, rng, bboxOf(M.roof), (x, y) => inPoly(M.roof, x, y), (x, y) => clamp(0.35 + (x - 330) / 400), ['#2e2c2e', '#403d3e', '#555151', '#6d6866'], { angle: 0.5, gap: 3, len: [8, 14] });
-  yield* pencilG(g, rng, bboxOf(M.spire), (x, y) => inPoly(M.spire, x, y), (x) => clamp(0.3 + (x - 181) / 70), ['#2e2c2e', '#474344', '#5f5a59'], { gap: 2.8, len: [6, 12] });
+  yield* pencilG(g, rng, bboxOf(M.wall), (x, y) => inPoly(M.wall, x, y), wallTone, ['#8d94a0', '#aab0b8', '#c9cbc9', '#e0ddd2', '#efe9dc'], { angle: 0, wander: 0.03, curve: 0.04, gap: 3.2, len: [18, 36], crossOff: 1.57, crossAmt: 0.4 });
+  yield* pencilG(g, rng, bboxOf(M.tower), (x, y) => inPoly(M.tower, x, y), (x) => clamp(0.45 + (x - 148) / 140), ['#7b838f', '#9aa1aa', '#bcbfbf', '#d9d6cc'], { angle: 0, wander: 0.03, curve: 0.04, gap: 3.2, len: [12, 22], crossOff: 1.57 });
+  yield* pencilG(g, rng, bboxOf(M.roof), (x, y) => inPoly(M.roof, x, y), (x, y) => clamp(0.35 + (x - 330) / 400), ['#2e2c2e', '#403d3e', '#555151', '#6d6866'], { flow: x => (x < 330 ? -0.67 : 0.67), curve: 0.1, gap: 3, len: [10, 18], crossOff: 1.3 });
+  yield* pencilG(g, rng, bboxOf(M.spire), (x, y) => inPoly(M.spire, x, y), (x) => clamp(0.3 + (x - 181) / 70), ['#2e2c2e', '#474344', '#5f5a59'], { angle: -1.45, wander: 0.1, gap: 2.8, len: [8, 14] });
   g.fillStyle = '#9ea4ab'; g.beginPath(); polyPath(g, M.belfry); g.fill();
   g.fillStyle = '#1d1c22'; g.fillRect(162, 652, 40, 44);
   for (let row = 0; row < 2; row++) for (let k = 0; k < 4; k++) {
@@ -1774,9 +1896,10 @@ function* buildLexBg(g, rng) {
   // The green and the road.
   const ground = (x, y) => y >= lexHorizon(x) + 2 && !(inPoly(M.wall, x, y) || inPoly(M.tower, x, y)) && !(x > 918 && x < 956 && y < 1010);
   yield* pencilG(g, rng, { x0: -180, y0: 860, x1: 1130, y1: 2030 }, (x, y) => ground(x, y) && (y < roadTop(x) || y > roadBot(x)),
-    (x, y) => clamp(0.75 - 0.45 * smooth(clamp((y - 900) / 1000)) + 0.18 * fbm(x * 0.006, y * 0.01, 23)), GRASS, { angle: -1.2, gap: 4.2, len: [9, 18], crossAmt: 0.6 });
+    (x, y) => clamp(0.75 - 0.45 * smooth(clamp((y - 900) / 1000)) + 0.18 * fbm(x * 0.006, y * 0.01, 23)), GRASS, { flow: FLOW.noise(-1.45, 0.35, 0.012, 23), curve: 0.55, gap: 4.2, len: [8, 17], crossOff: 0.95, crossAmt: 0.55 });
   yield* pencilG(g, rng, { x0: -180, y0: 1450, x1: 1130, y1: 1670 }, (x, y) => y >= roadTop(x) && y <= roadBot(x),
-    (x, y) => clamp(0.62 + 0.15 * fbm(x * 0.01, y * 0.04, 6) - 0.25 * Math.exp(-(((y - 1540) / 9) ** 2)) - 0.25 * Math.exp(-(((y - 1612) / 9) ** 2))), ['#6c5438', '#86694a', '#a3855f', '#bda179', '#d2bb95'], { angle: -0.08, gap: 3.8, len: [12, 26], crossAmt: 0.45 });
+    (x, y) => clamp(0.62 + 0.15 * fbm(x * 0.01, y * 0.04, 6) - 0.25 * Math.exp(-(((y - 1540) / 9) ** 2)) - 0.25 * Math.exp(-(((y - 1612) / 9) ** 2))), ['#6c5438', '#86694a', '#a3855f', '#bda179', '#d2bb95'], { flow: FLOW.noise(0.0, 0.1, 0.006, 6), curve: 0.2, gap: 3.8, len: [14, 32], crossAngle: 0.5, crossAmt: 0.45 });
+  yield* stippleG(g, rng, { x0: -180, y0: 1450, x1: 1130, y1: 1670 }, (x, y) => y >= roadTop(x) + 4 && y <= roadBot(x) - 4, () => 0.5, ['#4a3a26', '#6c5438', '#e6d6b4'], { density: 0.006, size: 1.6, alpha: 0.7 });
   // Grass tufts.
   g.strokeStyle = '#3b5226'; g.lineWidth = 2; g.beginPath();
   for (let i = 0; i < 260; i++) {
@@ -1800,7 +1923,7 @@ function* buildLexWall(g, rng) {
   g.fillStyle = '#2c2a28'; g.beginPath(); g.moveTo(592, 1152); for (const s of stones.slice(0, 22)) g.lineTo(s[6][0], s[6][1]); g.lineTo(1130, 1262); g.lineTo(592, 1262); g.fill();
   for (const P of stones) {
     const b = bboxOf(P), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
-    yield* pencilG(g, rng, b, (x, y) => inPoly(P, x, y), (x, y) => clamp(0.62 - (y - cy) / 40 - (x - cx) / 120 + 0.12 * vnoise2(x * 0.1, y * 0.1, 3)), ['#3d3c3c', '#555454', '#6f6e6c', '#8b8a86', '#a8a6a0', '#c4c1b8'], { gap: 2.8, len: [5, 10], washAlpha: 0.5 });
+    yield* pencilG(g, rng, b, (x, y) => inPoly(P, x, y), (x, y) => clamp(0.62 - (y - cy) / 40 - (x - cx) / 120 + 0.12 * vnoise2(x * 0.1, y * 0.1, 3)), ['#3d3c3c', '#555454', '#6f6e6c', '#8b8a86', '#a8a6a0', '#c4c1b8'], { angle: (rand3(b.x0 | 0, b.y0 | 0, 5) - 0.5) * 3, wander: 0.15, curve: 0.5, gap: 2.8, len: [5, 11], washAlpha: 0.5 });
     sketchLine(g, P.concat([P[0]]), rng, 0.8, '#1e1b18', 2, 0.9);
   }
   g.fillStyle = '#6c7a3c'; g.globalAlpha = 0.6;
@@ -1949,12 +2072,12 @@ function* buildDecBg(g, rng) {
   const inP = polyMask([PARCH], box, 3);
   // Walnut desk.
   yield* pencilG(g, rng, box, (x, y) => !inP(x, y), (x, y) => clamp(0.45 + 0.3 * Math.sin(y * 0.05 + 3 * fbm(x * 0.01, y * 0.002, 3)) * 0.5 + 0.15 * fbm(x * 0.02, y * 0.004, 7) - (x > 952 && x < 990 && y > 60 ? 0.3 : 0) - (y > 2090 && y < 2124 && x > 150 ? 0.3 : 0)),
-    ['#1c0f07', '#2b180c', '#3b2213', '#4d2e1a', '#613c23', '#784c2e'], { angle: -0.02, gap: 3.6, len: [26, 60], jitter: 0.04, crossAmt: 0.5 });
+    ['#1c0f07', '#2b180c', '#3b2213', '#4d2e1a', '#613c23', '#784c2e'], { flow: FLOW.noise(0.02, 0.12, 0.004, 8), curve: 0.25, gap: 3.6, len: [30, 70], jitter: 0.04, crossAngle: 0.7, crossAmt: 0.5 });
   // Parchment: warm, with darker, worn edges, a few stains and two folds.
   const ed = (x, y) => Math.min(x - 128, 952 - x, y - 36, 2090 - y);
   yield* pencilG(g, rng, { x0: 120, y0: 30, x1: 960, y1: 2100 }, inP,
     (x, y) => clamp(0.74 + 0.12 * fbm(x * 0.004, y * 0.003, 11) - 0.45 * Math.exp(-ed(x, y) / 26) - (fbm(x * 0.01, y * 0.01, 19) > 0.42 ? 0.18 : 0) - 0.16 * Math.exp(-(((y - 710) / 5) ** 2)) - 0.16 * Math.exp(-(((y - 1405) / 5) ** 2))),
-    ['#9c7746', '#b48f5a', '#c8a56e', '#d8bb86', '#e4cda0', '#eddcb6'], { gap: 4.2, len: [12, 22], crossAmt: 0.45, washAlpha: 0.36 });
+    ['#9c7746', '#b48f5a', '#c8a56e', '#d8bb86', '#e4cda0', '#eddcb6'], { flow: FLOW.noise(-0.6, 1.4, 0.0035, 19), curve: 0.3, gap: 4.2, len: [12, 22], crossAmt: 0.45, washAlpha: 0.36 });
   sketchLine(g, [[140, 716], [940, 714]], rng, 1, '#f5ead0', 2.2, 0.6);
   sketchLine(g, [[140, 1411], [940, 1409]], rng, 1, '#f5ead0', 2.2, 0.6);
   sketchLine(g, PARCH.concat([PARCH[0]]), rng, 1.2, '#5c3d1f', 2.2, 0.85);
@@ -1962,7 +2085,7 @@ function* buildDecBg(g, rng) {
   const I = { x: 1016, y: 300 };
   g.fillStyle = '#1c1a1c'; g.beginPath(); g.ellipse(I.x, I.y + 40, 58, 18, 0, 0, TAU); g.fill();
   yield* pencilG(g, rng, { x0: I.x - 56, y0: I.y - 30, x1: I.x + 56, y1: I.y + 42 }, (x, y) => Math.abs(x - I.x) < 52 - (y < I.y - 10 ? (I.y - 10 - y) * 0.9 : 0) && y > I.y - 30 && y < I.y + 40,
-    (x) => clamp(0.6 - (x - I.x) / 90), ['#2a2a30', '#44454c', '#6a6b72', '#9a9ba0', '#c8c8c8'], { gap: 2.6, len: [6, 11], angle: -1.4 });
+    (x) => clamp(0.6 - (x - I.x) / 90), ['#2a2a30', '#44454c', '#6a6b72', '#9a9ba0', '#c8c8c8'], { gap: 2.6, len: [6, 12], flow: FLOW.around(I.x, I.y + 40, 2.5), curve: 0.5 });
   g.fillStyle = '#0a0a0e'; g.beginPath(); g.ellipse(I.x, I.y - 30, 26, 8, 0, 0, TAU); g.fill();
   sketchLine(g, [[I.x - 52, I.y + 40], [I.x - 52, I.y - 8], [I.x - 26, I.y - 30], [I.x + 26, I.y - 30], [I.x + 52, I.y - 8], [I.x + 52, I.y + 40]], rng, 1, '#101014', 2.2, 0.9);
 }
@@ -2087,17 +2210,17 @@ const bankTop = x => 812 + 30 * Math.sin(x * 0.006 + 0.3) + 18 * vnoise(x * 0.01
 function* buildDelSky(g, rng) {
   const box = { x0: -40, y0: -40, x1: 1120, y1: 880 };
   yield* pencilG(g, rng, box, () => true, (x, y) => clamp(0.12 + 0.3 * (y / 880) + 0.35 * smooth(clamp(fbm(x * 0.003, y * 0.005, 51) + 0.1)) + 0.25 * Math.exp(-Math.hypot(x - 820, y - 260) / 170)),
-    ['#11141f', '#181c2b', '#212739', '#2c3349', '#3b435b', '#555d74', '#7c8298'], { angle: -0.5, gap: 4.4, len: [16, 30], crossAmt: 0.75, washAlpha: 0.4 });
+    ['#11141f', '#181c2b', '#212739', '#2c3349', '#3b435b', '#555d74', '#7c8298'], { flow: FLOW.noise(-0.35, 1.0, 0.0022, 51), curve: 0.6, gap: 4.4, len: [20, 40], crossOff: 0.8, crossAmt: 0.75, washAlpha: 0.4 });
 }
 function* buildDelBank(g, rng) {
   const box = { x0: -460, y0: 640, x1: 1480, y1: 1010 };
-  yield* pencilG(g, rng, box, (x, y) => y > bankTop(x) && y < 960, (x, y) => clamp(0.8 - (y - bankTop(x)) / 300 + 0.1 * fbm(x * 0.01, y * 0.02, 5)), ['#4b5468', '#6d768a', '#939bab', '#bcc2cb', '#dde0e3'], { angle: -0.3, gap: 3.8, len: [10, 20], crossAmt: 0.5 });
+  yield* pencilG(g, rng, box, (x, y) => y > bankTop(x) && y < 960, (x, y) => clamp(0.8 - (y - bankTop(x)) / 300 + 0.1 * fbm(x * 0.01, y * 0.02, 5)), ['#4b5468', '#6d768a', '#939bab', '#bcc2cb', '#dde0e3'], { flow: FLOW.wobble(FLOW.along(bankTop), 0.12, 0.01, 5), curve: 0.35, gap: 3.8, len: [14, 28], crossAmt: 0.5 });
   // Pines along the far shore.
   const r = mulberry32(61);
   for (let x = -450; x < 1480; x += 14 + r() * 26) {
     const base = bankTop(x) + 6 + r() * 30, h = 50 + r() * 70, w = h * 0.34;
     const P = [[x, base - h], [x + w * 0.5, base - h * 0.55], [x + w * 0.3, base - h * 0.55], [x + w, base], [x - w, base], [x - w * 0.3, base - h * 0.55], [x - w * 0.5, base - h * 0.55]];
-    yield* pencilG(g, rng, bboxOf(P), (px, py) => inPoly(P, px, py), (px) => clamp(0.3 + (x - px) / w * 0.3), ['#0e1418', '#161f24', '#1f2a2f'], { gap: 2.4, len: [4, 8], cross: false, wash: false });
+    yield* pencilG(g, rng, bboxOf(P), (px, py) => inPoly(P, px, py), (px) => clamp(0.3 + (x - px) / w * 0.3), ['#0e1418', '#161f24', '#1f2a2f'], { flow: (px) => (px < x ? -0.5 : -2.64), curve: 0.4, gap: 2.4, len: [5, 10], cross: false, wash: false });
     g.strokeStyle = '#d9dee3'; g.lineWidth = 2; g.globalAlpha = 0.7; g.beginPath(); g.moveTo(x - w * 0.45, base - h * 0.5); g.lineTo(x + w * 0.1, base - h * 0.62); g.moveTo(x - w * 0.8, base - h * 0.05); g.lineTo(x, base - h * 0.2); g.stroke(); g.globalAlpha = 1;
   }
   g.fillStyle = '#10141b'; g.fillRect(-460, 952, 1940, 10);
@@ -2105,10 +2228,10 @@ function* buildDelBank(g, rng) {
 function wrapX(list, P, m) {
   for (const s of list) for (const arr of s.g) {
     const n = arr.length;
-    for (let i = 0; i < n; i += 4) {
-      const lo = Math.min(arr[i], arr[i + 2]), hi = Math.max(arr[i], arr[i + 2]);
-      if (lo < m) arr.push(arr[i] + P, arr[i + 1], arr[i + 2] + P, arr[i + 3]);
-      if (hi > P - m) arr.push(arr[i] - P, arr[i + 1], arr[i + 2] - P, arr[i + 3]);
+    for (let i = 0; i < n; i += 6) {
+      const lo = Math.min(arr[i], arr[i + 4]), hi = Math.max(arr[i], arr[i + 4]);
+      if (lo < m) arr.push(arr[i] + P, arr[i + 1], arr[i + 2] + P, arr[i + 3], arr[i + 4] + P, arr[i + 5]);
+      if (hi > P - m) arr.push(arr[i] - P, arr[i + 1], arr[i + 2] - P, arr[i + 3], arr[i + 4] - P, arr[i + 5]);
     }
   }
 }
@@ -2118,9 +2241,10 @@ function* buildDelRiver(g, rng) {
   const pal = ['#0b1019', '#111a26', '#182536', '#213247', '#2e435b', '#4a6078', '#8595a8'];
   const main = styles(pal.map(c => [c, 2.6, 0.88]), 5), wash = styles(pal.map(c => [c, 6, 0.35]), 3), hi = styles([['#a9b6c6', 2.2, 0.65]], 3);
   const pick = (x, y, r) => clamp(Math.floor((tone(x, y) + (r() - 0.5) * 0.25) * pal.length), 0, pal.length - 1);
-  yield* hatchG(rng, box, { angle: -0.02, gap: 6.5, lenMin: 30, lenMax: 60, jitter: 0.08, spacing: 0.55 }, (x, y, r) => wash[pick(x, y, r)]);
-  yield* hatchG(rng, box, { angle: -0.03, gap: 4.2, lenMin: 18, lenMax: 42, jitter: 0.06 }, (x, y, r) => main[pick(x, y, r)]);
-  yield* hatchG(rng, box, { angle: -0.02, gap: 9, lenMin: 10, lenMax: 26, jitter: 0.05 }, (x, y, r) => (r() < 0.16 + 0.3 * Math.max(0, Math.sin(TAU * x / P * 2 + y * 0.02)) * (1 - (y - 930) / 1100) ? hi[0] : null));
+  const rflow = (x, y) => 0.08 * Math.sin(TAU * x / P * 3 + y * 0.02) + 0.05 * Math.sin(y * 0.11);
+  yield* hatchG(rng, box, { angle: -0.02, flow: rflow, curve: 0.3, gap: 6.5, lenMin: 30, lenMax: 60, jitter: 0.08, spacing: 0.55 }, (x, y, r) => wash[pick(x, y, r)]);
+  yield* hatchG(rng, box, { angle: -0.03, flow: rflow, curve: 0.45, gap: 4.2, lenMin: 18, lenMax: 42, jitter: 0.06 }, (x, y, r) => main[pick(x, y, r)]);
+  yield* hatchG(rng, box, { angle: -0.02, flow: rflow, curve: 0.5, gap: 9, lenMin: 10, lenMax: 26, jitter: 0.05 }, (x, y, r) => (r() < 0.16 + 0.3 * Math.max(0, Math.sin(TAU * x / P * 2 + y * 0.02)) * (1 - (y - 930) / 1100) ? hi[0] : null));
   for (const s of [wash, main, hi]) wrapX(s, P, 70);
   yield* drawStylesG(g, wash); yield* drawStylesG(g, main); yield* drawStylesG(g, hi);
 }
@@ -2129,7 +2253,7 @@ function* buildBoatBack(g, rng) {
   for (let x = 40; x <= 1040; x += 10) top.push([x, DEL.gun(x) - 17 * Math.sin(clamp((x - 40) / 1000) * Math.PI)]);
   for (const p of top) P.push(p);
   for (let x = 1040; x >= 40; x -= 10) P.push([x, DEL.gun(x) + 2]);
-  yield* pencilG(g, rng, bboxOf(P, 2), (x, y) => inPoly(P, x, y), () => 0.3, ['#0f0c0c', '#1b1512', '#2a211b'].map(c => lit(c, L)), { gap: 3, len: [10, 20] });
+  yield* pencilG(g, rng, bboxOf(P, 2), (x, y) => inPoly(P, x, y), () => 0.3, ['#0f0c0c', '#1b1512', '#2a211b'].map(c => lit(c, L)), { flow: FLOW.along(DEL.gun), curve: 0.1, gap: 3, len: [14, 28] });
   sketchLine(g, top, rng, 1, lit('#6e5a48', L), 4, 0.9);
   sketchLine(g, top.map(([x, y]) => [x, y - 2]), rng, 1.2, '#dfe4ea', 2.4, 0.7);
 }
@@ -2137,7 +2261,7 @@ function* buildBoatFront(g, rng) {
   const L = STORM, H = [];
   for (let x = 40; x <= 1040; x += 10) H.push([x, DEL.gun(x)]);
   H.push([1040, 1200], [1000, 1270], [940, 1314], [170, 1314], [100, 1262], [45, 1190]);
-  yield* pencilG(g, rng, bboxOf(H, 2), (x, y) => inPoly(H, x, y), (x, y) => clamp(0.5 - 0.35 * (y - DEL.gun(x)) / 90 + 0.1 * fbm(x * 0.02, y * 0.08, 3)), ['#0c0908', '#16110e', '#221a15', '#30251d', '#40322a', '#554436'].map(c => lit(c, L)), { angle: -0.06, gap: 3.4, len: [14, 30], crossAmt: 0.6 });
+  yield* pencilG(g, rng, bboxOf(H, 2), (x, y) => inPoly(H, x, y), (x, y) => clamp(0.5 - 0.35 * (y - DEL.gun(x)) / 90 + 0.1 * fbm(x * 0.02, y * 0.08, 3)), ['#0c0908', '#16110e', '#221a15', '#30251d', '#40322a', '#554436'].map(c => lit(c, L)), { flow: FLOW.wobble(FLOW.along(DEL.gun), 0.04, 0.01, 3), curve: 0.12, gap: 3.4, len: [18, 38], crossOff: 1.35, crossAmt: 0.6 });
   g.strokeStyle = '#07060a'; g.lineWidth = 1.6; g.globalAlpha = 0.8; g.beginPath();
   for (let k = 1; k < 6; k++) { for (let x = 60; x <= 1030; x += 10) { const y = DEL.gun(x) + 16 * k; if (y > 1312) continue; x === 60 ? g.moveTo(x, y) : g.lineTo(x, y); } }
   g.stroke(); g.globalAlpha = 1;
@@ -2152,8 +2276,8 @@ function* buildFloe(g, rng, k) {
   for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; top.push([Math.cos(a) * w * (0.8 + 0.25 * r()), Math.sin(a) * h * (0.75 + 0.3 * r()) - 8]); }
   const side = top.filter(p => p[1] > -9).map(([x, y]) => [x, y]).sort((a, b) => a[0] - b[0]);
   const band = side.concat(side.slice().reverse().map(([x, y]) => [x, y + 12 + r() * 4]));
-  yield* pencilG(g, rng, bboxOf(band), (x, y) => inPoly(band, x, y), () => 0.3, ['#46586c', '#5d7087', '#7a8ca0'], { gap: 2.4, len: [5, 10], cross: false });
-  yield* pencilG(g, rng, bboxOf(top), (x, y) => inPoly(top, x, y), (x, y) => clamp(0.75 - (y + 8) / 60 + 0.15 * vnoise2(x * 0.05, y * 0.1, k)), ['#8e9db0', '#b4c0cd', '#d3dbe3', '#eef1f4'], { gap: 2.6, len: [6, 12], cross: false });
+  yield* pencilG(g, rng, bboxOf(band), (x, y) => inPoly(band, x, y), () => 0.3, ['#46586c', '#5d7087', '#7a8ca0'], { angle: -1.57, wander: 0.1, gap: 2.4, len: [5, 9], cross: false });
+  yield* pencilG(g, rng, bboxOf(top), (x, y) => inPoly(top, x, y), (x, y) => clamp(0.75 - (y + 8) / 60 + 0.15 * vnoise2(x * 0.05, y * 0.1, k)), ['#8e9db0', '#b4c0cd', '#d3dbe3', '#eef1f4'], { angle: 0.05, wander: 0.25, curve: 0.3, gap: 2.6, len: [8, 16], cross: false });
   sketchLine(g, top.concat([top[0]]), rng, 0.8, '#223040', 1.8, 0.85);
   sketchLine(g, band.slice(side.length), rng, 0.8, '#0b121c', 2.2, 0.9);
 }
@@ -2280,18 +2404,18 @@ function* buildYorkBg(g, rng) {
   const box = { x0: 20, y0: 280, x1: 1080, y1: 2010 };
   const L = LIGHTS.gold;
   yield* pencilG(g, rng, box, (x, y) => y < 702, (x, y) => clamp(0.18 + 0.8 * smooth(clamp(y / 700)) + 0.1 * fbm(x * 0.003, y * 0.01, 71) - (x < 520 && y > 520 ? 0.25 * smooth(clamp((y - 520) / 160)) * (1 - x / 520) : 0)),
-    ['#6f7f8e', '#8b98a2', '#a9aea8', '#c9bf9f', '#e1cc9c', '#eedbb0', '#f5e8c8'], { angle: -0.2, gap: 4.6, len: [16, 30], crossAmt: 0.35, washAlpha: 0.32 });
+    ['#6f7f8e', '#8b98a2', '#a9aea8', '#c9bf9f', '#e1cc9c', '#eedbb0', '#f5e8c8'], { flow: FLOW.noise(0.02, 0.22, 0.002, 71), curve: 0.35, gap: 4.6, len: [22, 44], crossOff: 0.45, crossAmt: 0.35, washAlpha: 0.32 });
   const cl = styles([['#b8a888', 2.4, 0.5], ['#f3e3bd', 2.4, 0.55]], 4);
-  hatch(rng, box, { angle: -0.04, gap: 5.5, lenMin: 26, lenMax: 60 }, (x, y, r) => {
+  hatch(rng, box, { angle: -0.04, flow: FLOW.noise(-0.03, 0.1, 0.004, 73), curve: 0.4, gap: 5.5, lenMin: 26, lenMax: 60 }, (x, y, r) => {
     const v = fbm(x * 0.003, y * 0.022, 73); return y > 90 && y < 560 && v > 0.3 && r() < 0.7 ? cl[v > 0.45 ? 1 : 0] : null;
   });
   yield* drawStylesG(g, cl);
   // Far shore, river, and the French fleet.
-  yield* pencilG(g, rng, { x0: -40, y0: 680, x1: 1120, y1: 716 }, (x, y) => y > 692 + 6 * Math.sin(x * 0.02) && y < 714, () => 0.3, ['#2f3a26', '#415034', '#566645'], { gap: 3, len: [6, 12], cross: false });
-  yield* pencilG(g, rng, { x0: -40, y0: 710, x1: 1120, y1: 812 }, (x, y) => y >= 712, (x, y) => clamp(0.55 + 0.25 * Math.sin(y * 0.3 + x * 0.01) * 0.5 - (y - 712) / 400), ['#3e5260', '#566c79', '#738a93', '#96abaf', '#b9c7c4'], { angle: -0.02, gap: 3.6, len: [16, 34], crossAmt: 0.3 });
+  yield* pencilG(g, rng, { x0: -40, y0: 680, x1: 1120, y1: 716 }, (x, y) => y > 692 + 6 * Math.sin(x * 0.02) && y < 714, () => 0.3, ['#2f3a26', '#415034', '#566645'], { angle: -1.3, wander: 0.4, curve: 0.5, gap: 3, len: [5, 10], cross: false });
+  yield* pencilG(g, rng, { x0: -40, y0: 710, x1: 1120, y1: 812 }, (x, y) => y >= 712, (x, y) => clamp(0.55 + 0.25 * Math.sin(y * 0.3 + x * 0.01) * 0.5 - (y - 712) / 400), ['#3e5260', '#566c79', '#738a93', '#96abaf', '#b9c7c4'], { angle: -0.02, flow: FLOW.noise(0, 0.08, 0.006, 12), curve: 0.4, gap: 3.6, len: [18, 40], crossAngle: 0.25, crossAmt: 0.3 });
   for (const [sx, sc] of [[640, 0.9], [812, 1.0], [985, 0.85]]) {
     const hull = [[sx - 80 * sc, 742], [sx + 76 * sc, 740], [sx + 64 * sc, 764], [sx - 66 * sc, 766]];
-    yield* pencilG(g, rng, bboxOf(hull), (x, y) => inPoly(hull, x, y), (x, y) => (y < 750 ? 0.8 : 0.25), ['#1e1712', '#33271d', '#6e5a36', '#9c8450'], { gap: 2.2, len: [4, 9], cross: false });
+    yield* pencilG(g, rng, bboxOf(hull), (x, y) => inPoly(hull, x, y), (x, y) => (y < 750 ? 0.8 : 0.25), ['#1e1712', '#33271d', '#6e5a36', '#9c8450'], { angle: 0.02, wander: 0.05, gap: 2.2, len: [6, 12], cross: false });
     sketchLine(g, hull.concat([hull[0]]), rng, 0.6, '#1a120c', 1.6, 0.9);
     for (const [mx, mh] of [[-40, 92], [0, 118], [38, 84]]) {
       const x = sx + mx * sc; sketchLine(g, [[x, 742], [x, 742 - mh * sc]], rng, 0.5, '#2a1d14', 2.2, 0.95);
@@ -2305,12 +2429,12 @@ function* buildYorkBg(g, rng) {
   const r = mulberry32(909);
   for (let x = -20; x < 520; x += 56 + r() * 40) {
     const w = 44 + r() * 30, h = 34 + r() * 30, P = [[x, 830], [x, 830 - h], [x + w / 2, 830 - h - 22], [x + w, 830 - h], [x + w, 830]];
-    yield* pencilG(g, rng, bboxOf(P), (px, py) => inPoly(P, px, py), (px, py) => (py < 830 - h ? 0.25 : clamp(0.55 + (px - x) / w * 0.3)), ['#3a2a24', '#6a3e2e', '#8c5238', '#a8694a'], { gap: 2.6, len: [5, 10], cross: false });
+    yield* pencilG(g, rng, bboxOf(P), (px, py) => inPoly(P, px, py), (px, py) => (py < 830 - h ? 0.25 : clamp(0.55 + (px - x) / w * 0.3)), ['#3a2a24', '#6a3e2e', '#8c5238', '#a8694a'], { flow: (px, py) => (py < 830 - h ? (px < x + w / 2 ? -0.75 : 0.75) : -1.57), curve: 0.1, gap: 2.6, len: [6, 11], cross: false });
     sketchLine(g, P, rng, 0.6, '#24160f', 1.6, 0.85);
   }
   const works = x => 812 + 22 * Math.sin(x * 0.012) + 12 * vnoise(x * 0.03, 81) - (Math.abs(x - 320) < 90 ? 26 : 0) - (Math.abs(x - 860) < 70 ? 20 : 0);
   yield* pencilG(g, rng, { x0: -40, y0: 760, x1: 1120, y1: 960 }, (x, y) => y > works(x) && y < 948 + 8 * Math.sin(x * 0.01),
-    (x, y) => clamp(0.65 - (y - works(x)) / 200 + 0.15 * fbm(x * 0.02, y * 0.03, 83)), ['#4a3421', '#5f432a', '#7a5836', '#977146', '#b28b5a'], { angle: -0.6, gap: 3.8, len: [9, 17], crossAmt: 0.6 });
+    (x, y) => clamp(0.65 - (y - works(x)) / 200 + 0.15 * fbm(x * 0.02, y * 0.03, 83)), ['#4a3421', '#5f432a', '#7a5836', '#977146', '#b28b5a'], { flow: FLOW.wobble(FLOW.along(works, 10), 0.25, 0.02, 83), curve: 0.4, gap: 3.8, len: [12, 22], crossOff: 1.1, crossAmt: 0.6 });
   // Gabions and cannon along the top; stakes below.
   for (let x = -30; x < 1110; x += 30) {
     const y = works(x); if (r() < 0.25) continue;
@@ -2325,9 +2449,10 @@ function* buildYorkBg(g, rng) {
   // Autumn field and the road.
   const yRoadT = x => 1268 + 8 * Math.sin(x * 0.004), yRoadB = x => 1476 + 6 * Math.sin(x * 0.005 + 2);
   yield* pencilG(g, rng, { x0: 20, y0: 930, x1: 1080, y1: 2010 }, (x, y) => y > 944 + 8 * Math.sin(x * 0.01) && (y < yRoadT(x) || y > yRoadB(x)),
-    (x, y) => clamp(0.72 - 0.4 * smooth(clamp((y - 950) / 1000)) + 0.18 * fbm(x * 0.006, y * 0.01, 87)), ['#4d4a26', '#666032', '#807840', '#9a9052', '#b5a86a', '#cbbd85'], { angle: -1.15, gap: 4.2, len: [9, 18], crossAmt: 0.55 });
+    (x, y) => clamp(0.72 - 0.4 * smooth(clamp((y - 950) / 1000)) + 0.18 * fbm(x * 0.006, y * 0.01, 87)), ['#4d4a26', '#666032', '#807840', '#9a9052', '#b5a86a', '#cbbd85'], { flow: FLOW.noise(-1.4, 0.4, 0.011, 87), curve: 0.6, gap: 4.2, len: [8, 17], crossOff: 0.9, crossAmt: 0.55 });
   yield* pencilG(g, rng, { x0: -40, y0: 1250, x1: 1120, y1: 1490 }, (x, y) => y >= yRoadT(x) && y <= yRoadB(x),
-    (x, y) => clamp(0.62 + 0.15 * fbm(x * 0.01, y * 0.04, 88) - 0.22 * Math.exp(-(((y - 1330) / 8) ** 2)) - 0.22 * Math.exp(-(((y - 1440) / 8) ** 2))), ['#6e5638', '#896c4a', '#a5875f', '#bea27a', '#d3bd96'], { angle: -0.06, gap: 3.8, len: [12, 26], crossAmt: 0.4 });
+    (x, y) => clamp(0.62 + 0.15 * fbm(x * 0.01, y * 0.04, 88) - 0.22 * Math.exp(-(((y - 1330) / 8) ** 2)) - 0.22 * Math.exp(-(((y - 1440) / 8) ** 2))), ['#6e5638', '#896c4a', '#a5875f', '#bea27a', '#d3bd96'], { flow: FLOW.noise(0.01, 0.08, 0.006, 88), curve: 0.2, gap: 3.8, len: [14, 32], crossAngle: 0.55, crossAmt: 0.4 });
+  yield* stippleG(g, rng, { x0: 20, y0: 1250, x1: 1080, y1: 1490 }, (x, y) => y >= yRoadT(x) + 4 && y <= yRoadB(x) - 4, () => 0.5, ['#4a3a26', '#6e5638', '#e3d2ae'], { density: 0.006, size: 1.6, alpha: 0.7 });
   // The victors, drawn up in two lines: Americans (left) and French (right).
   for (const [x0, x1, outfit, dir] of [[40, 440, 'continental', 1], [640, 1060, 'french', -1]]) {
     for (const [row, fy, s] of [[0, 1080, 0.46], [1, 1112, 0.52]]) {
@@ -2411,7 +2536,7 @@ function* buildPeaceBg(g, rng) {
   const sd = (x, y) => Math.hypot(x - sun.x, y - sun.y);
   yield* pencilG(g, rng, box, (x, y) => y < far(x) + 4 && sd(x, y) > sun.r + 4,
     (x, y) => clamp(0.12 + 0.72 * smooth(clamp(y / 1000)) + 0.4 * Math.exp(-(sd(x, y) - sun.r) / 240) + 0.08 * fbm(x * 0.003, y * 0.01, 93)),
-    ['#7e93aa', '#98a9b8', '#bdbab2', '#e6c79d', '#f2c08a', '#f6d7a5', '#fbe9c6'], { angle: -0.22, gap: 4.6, len: [16, 30], crossAmt: 0.35, washAlpha: 0.32 });
+    ['#7e93aa', '#98a9b8', '#bdbab2', '#e6c79d', '#f2c08a', '#f6d7a5', '#fbe9c6'], { flow: FLOW.mix(FLOW.noise(0.0, 0.25, 0.002, 93), FLOW.around(sun.x, sun.y), (x, y) => 0.9 * Math.exp(-(sd(x, y) - sun.r) / 260)), curve: 0.4, gap: 4.6, len: [20, 40], crossOff: 0.5, crossAmt: 0.35, washAlpha: 0.32 });
   // Rays.
   const ray = styles([['#fbe6b8', 2.4, 0.5]], 4);
   hatch(rng, box, { angle: 0, gap: 7, lenMin: 20, lenMax: 44, angleAt: (x, y) => Math.atan2(y - sun.y, x - sun.x) }, (x, y, r) => {
@@ -2420,8 +2545,8 @@ function* buildPeaceBg(g, rng) {
   });
   yield* drawStylesG(g, ray);
   yield* pencilG(g, rng, { x0: sun.x - sun.r, y0: sun.y - sun.r, x1: sun.x + sun.r, y1: sun.y + sun.r }, (x, y) => sd(x, y) < sun.r && y < far(x),
-    (x, y) => clamp(0.9 - (y - sun.y + sun.r) / 500), ['#eea24c', '#f4b660', '#f8cc7c', '#fbe0a0'], { gap: 3.2, len: [7, 13], cross: false, washAlpha: 0.5 });
-  yield* pencilG(g, rng, { x0: -40, y0: 900, x1: 1120, y1: 1200 }, (x, y) => y >= far(x) && y < mid(x) + 4, (x, y) => clamp(0.6 - (y - far(x)) / 260), ['#5c7068', '#72877a', '#8b9d8a', '#a6b39c'], { angle: -0.3, gap: 3.8, len: [10, 20], crossAmt: 0.4 });
+    (x, y) => clamp(0.9 - (y - sun.y + sun.r) / 500), ['#eea24c', '#f4b660', '#f8cc7c', '#fbe0a0'], { flow: FLOW.around(sun.x, sun.y), curve: 0.6, gap: 3.2, len: [8, 15], cross: false, washAlpha: 0.5 });
+  yield* pencilG(g, rng, { x0: -40, y0: 900, x1: 1120, y1: 1200 }, (x, y) => y >= far(x) && y < mid(x) + 4, (x, y) => clamp(0.6 - (y - far(x)) / 260), ['#5c7068', '#72877a', '#8b9d8a', '#a6b39c'], { flow: FLOW.mix(FLOW.along(far), FLOW.along(mid), (x, y) => clamp((y - far(x)) / Math.max(20, mid(x) - far(x)))), curve: 0.3, gap: 3.8, len: [14, 28], crossAmt: 0.4 });
   // Patchwork fields on the near hills, in perspective, edged with broken hedgerows.
   const ROWS = [1040, 1082, 1146, 1206, 1300, 1380, 1506, 1650, 1768, 1940, 2200];
   const kAt = y => clamp((y - 840) / 1080, 0.05, 2);
@@ -2431,11 +2556,11 @@ function* buildPeaceBg(g, rng) {
   const ground = (x, y) => y >= mid(x);
   const depth = y => 0.72 - 0.4 * smooth(clamp((y - 1050) / 900));
   yield* pencilG(g, rng, { x0: -40, y0: 1000, x1: 1120, y1: 1960 }, (x, y) => ground(x, y) && field(x, y) < 2,
-    (x, y) => clamp(depth(y) + 0.14 * fbm(x * 0.008, y * 0.01, 95) - (field(x, y) === 1 ? 0.18 : 0)), ['#3b5529', '#4a6630', '#5d7a3a', '#728d47', '#8ba35c'], { angle: -1.1, gap: 4.2, len: [9, 18], crossAmt: 0.55 });
+    (x, y) => clamp(depth(y) + 0.14 * fbm(x * 0.008, y * 0.01, 95) - (field(x, y) === 1 ? 0.18 : 0)), ['#3b5529', '#4a6630', '#5d7a3a', '#728d47', '#8ba35c'], { flow: (x, y) => (field(x, y) === 1 ? FLOW.toward(540, 820)(x, y) : -1.45 + 0.35 * vnoise2(x * 0.012, y * 0.012, 95)), curve: 0.5, gap: 4.2, len: [8, 17], crossOff: 0.9, crossAmt: 0.55 });
   yield* pencilG(g, rng, { x0: -40, y0: 1000, x1: 1120, y1: 1960 }, (x, y) => ground(x, y) && field(x, y) === 2,
-    (x, y) => clamp(depth(y) + 0.14 * fbm(x * 0.008, y * 0.01, 96)), ['#846634', '#9e7f40', '#b69650', '#c9ab66', '#d8bf82'], { angle: -0.5, gap: 4.0, len: [9, 18], crossAmt: 0.5 });
+    (x, y) => clamp(depth(y) + 0.14 * fbm(x * 0.008, y * 0.01, 96)), ['#846634', '#9e7f40', '#b69650', '#c9ab66', '#d8bf82'], { flow: FLOW.noise(-1.55, 0.18, 0.01, 96), curve: 0.35, gap: 4.0, len: [12, 24], crossOff: 0.6, crossAmt: 0.5 });
   yield* pencilG(g, rng, { x0: -40, y0: 1000, x1: 1120, y1: 1960 }, (x, y) => ground(x, y) && field(x, y) === 3,
-    (x, y) => clamp(depth(y) - 0.08 + 0.14 * fbm(x * 0.008, y * 0.01, 98) + 0.12 * Math.sin(y * 0.3)), ['#5a4027', '#6f5132', '#86653f', '#9c7b52'], { angle: -0.08, gap: 3.8, len: [12, 24], crossAmt: 0.45 });
+    (x, y) => clamp(depth(y) - 0.08 + 0.14 * fbm(x * 0.008, y * 0.01, 98) + 0.12 * Math.sin(y * 0.3)), ['#5a4027', '#6f5132', '#86653f', '#9c7b52'], { flow: FLOW.toward(540, 820), curve: 0.05, gap: 3.8, len: [16, 34], crossAngle: 0.1, crossAmt: 0.45 });
   const bush = (x, y) => {
     if (y < mid(x) + 2 || x < -40 || x > 1120 || rng() < 0.22) return;
     const r = (2.2 + 4.2 * kAt(y)) * (0.75 + 0.5 * rng());
@@ -2456,8 +2581,8 @@ function* buildPeaceBg(g, rng) {
   // Farmhouse and barn.
   for (const [x, y, w, h, wall, roof] of [[600, 1150, 110, 62, ['#b8b3a6', '#d9d3c4', '#f0ead9'], ['#6b2a20', '#8a3a2a', '#a44a34']], [742, 1168, 96, 58, ['#7a2c20', '#983a28', '#b44c34'], ['#3c3430', '#524842', '#6a5e56']]]) {
     const Wl = [[x, y + h], [x, y], [x + w, y], [x + w, y + h]], R = [[x - 10, y + 4], [x + w / 2, y - 40], [x + w + 10, y + 4]];
-    yield* pencilG(g, rng, bboxOf(Wl), (px, py) => inPoly(Wl, px, py), (px) => clamp(0.4 + (px - x) / w * 0.5), wall, { gap: 2.4, len: [5, 10], cross: false });
-    yield* pencilG(g, rng, bboxOf(R), (px, py) => inPoly(R, px, py), (px) => clamp(0.3 + (px - x) / w * 0.5), roof, { gap: 2.4, len: [5, 10], cross: false });
+    yield* pencilG(g, rng, bboxOf(Wl), (px, py) => inPoly(Wl, px, py), (px) => clamp(0.4 + (px - x) / w * 0.5), wall, { angle: -1.57, wander: 0.05, gap: 2.4, len: [6, 12], cross: false });
+    yield* pencilG(g, rng, bboxOf(R), (px, py) => inPoly(R, px, py), (px) => clamp(0.3 + (px - x) / w * 0.5), roof, { flow: px => (px < x + w / 2 ? -0.7 : 0.7), gap: 2.4, len: [6, 12], cross: false });
     g.fillStyle = '#2a2420'; g.fillRect(x + w * 0.42, y + h * 0.45, w * 0.16, h * 0.55);
     sketchLine(g, Wl, rng, 0.8, '#24160f', 1.8, 0.9); sketchLine(g, R, rng, 0.8, '#24160f', 1.8, 0.9);
   }
@@ -2465,7 +2590,8 @@ function* buildPeaceBg(g, rng) {
   for (const [x, y, rr] of [[120, 1180, 40], [190, 1200, 30], [520, 1190, 34], [930, 1150, 44], [1010, 1170, 36], [70, 1500, 70], [420, 1330, 44]]) {
     const inT = (px, py) => Math.hypot(px - x, (py - y) * 1.1) < rr * (0.85 + 0.15 * vnoise(Math.atan2(py - y, px - x) * 3, x));
     g.fillStyle = '#3a2a1e'; g.fillRect(x - 3, y + rr * 0.6, 6, rr * 0.8);
-    yield* pencilG(g, rng, { x0: x - rr, y0: y - rr, x1: x + rr, y1: y + rr }, inT, (px, py) => clamp(0.6 - (py - y) / (2 * rr) - (px - x) / (3 * rr)), ['#24381c', '#344d24', '#46632e', '#5d7a3c'], { gap: 3, len: [6, 11] });
+    yield* pencilG(g, rng, { x0: x - rr, y0: y - rr, x1: x + rr, y1: y + rr }, inT, (px, py) => clamp(0.6 - (py - y) / (2 * rr) - (px - x) / (3 * rr)), ['#24381c', '#344d24', '#46632e', '#5d7a3c'], { flow: FLOW.wobble(FLOW.around(x, y), 0.6, 0.05, x | 0), curve: 0.7, gap: 3.4, len: [6, 11], density: 0.8 });
+    yield* scribbleG(g, rng, { x0: x - rr, y0: y - rr, x1: x + rr, y1: y + rr }, inT, (px, py) => clamp(0.55 - (py - y) / (2 * rr) - (px - x) / (3 * rr)), ['#1f3218', '#2e4520', '#40592a'], { cell: 9, step: 3.5, loops: 7, width: 1.6, alpha: 0.7 });
   }
 }
 const PEACE_LAYER = new BoilLayer({ name: 'peaceBg', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.7, seed: 701, build: buildPeaceBg });
