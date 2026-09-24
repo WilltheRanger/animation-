@@ -221,7 +221,7 @@ const SCENE_LIST = [
   ['delaware',     'Dec 1776',      18, { strokes: 1 / 24, shore: 18 / 24 }],
   ['trenton',      'Dec 1776',      14, { charge: 6 / 28 }],
   ['saratoga',     'Oct 1777',      22, { swords: 20 / 40 }],
-  ['valley',       '1777–78',       24, {}],
+  ['valley',       '1777–78',       24, { drill: 12 / 30, step: 17 / 30, present: 24 / 30 }],
   ['france',       'Feb 1778',      18, { sign: 21 / 33 }],
   ['monmouth',     'Jun 1778',      18, { shot: 10 / 30, takes: 14 / 30 }],
   ['jones',        'Sep 1779',      24, { broadside: 6 / 36, quote: 18 / 36 }],
@@ -4862,6 +4862,459 @@ function drawDelaware(g, t, lt, tick) {
   }
 }
 function camDelaware(lt) { const u = smooth(clamp(lt / durOf('delaware'))); return { z: lerp(1.1, 1.15, u), x: lerp(548, 532, u), y: lerp(1124, 1112, u), rot: 0 }; }
+
+/* =========================== scene 18 — Trenton, 1776 ========================= */
+// Dawn after the crossing, in the snow: the Americans charge down King Street behind their
+// guns; the Hessians stumble out of the houses and throw down their arms.
+function runPose(d, S = 190) {
+  const P = basePose(), beta = 0.36;
+  const foot = o => { const u = d / S + o, k = Math.floor(u), p = u - k, X = (k - o) * S + beta * S / 2; if (p < beta) return [X - d, -FIG.ankle, 0]; const q = (p - beta) / (1 - beta); return [X + S * smooth(q) - d, -FIG.ankle - Math.sin(Math.PI * q) * 30, -0.4 * Math.sin(Math.PI * q)]; };
+  const a = foot(0), b = foot(0.5);
+  P.nf = [a[0], a[1]]; P.nfa = a[2]; P.ff = [b[0], b[1]]; P.ffa = b[2];
+  const u = d / S; P.hip = [0, -(FIG.hipH - 8 - 7 * (0.5 + 0.5 * Math.cos(4 * Math.PI * u)))]; P.lean = 0.22; P.tails = Math.sin(TAU * u * 2) * 0.9;
+  P.nh = armAt(P, false, clamp(-a[0] * 0.012, -0.9, 0.9), 0.8); P.fh = armAt(P, true, clamp(-b[0] * 0.012, -0.9, 0.9), 0.8); P.ne = P.fe = [-0.2, 1];
+  return P;
+}
+const TRN = (() => {
+  const s0 = sceneById.trenton.start, B = beatOf('trenton'), T = { charge: cue('trenton', 'charge') };
+  T.gun = T.charge + 0.5; T.out = s0 + 5.2; T.give = s0 + 8.8;
+  const amer = [[300, 'continental'], [376, 'ragged'], [224, 'militiaA'], [446, 'raggedB'], [150, 'continental']].map(([x, o], i) => ({ x, y: 1600 + (i % 2) * 16, s: 1.6, outfit: o, seed: 280 + i, j: i * 0.18 }));
+  const hess = [[756, 0.2], [834, 0.7], [906, 1.1], [976, 0.45], [1046, 0.9]].map(([x, d], i) => ({ x, y: 1590 + (i % 2) * 18, s: 1.56, seed: 286 + i, d, fires: i === 1 }));
+  return { s0, B, T, amer, hess };
+})();
+const TRN_LIGHT = { tint: '#d8c0c8', amt: 0.14, dark: 0.06, ink: '#1e1822', dir: [0.8, -0.6] };
+function* buildTrenton(g, rng) {
+  const hz = 1240, L = TRN_LIGHT;
+  // A cold pink dawn under snow cloud.
+  yield* pencilG(g, rng, { x0: -40, y0: -40, x1: 1120, y1: hz + 6 }, () => true, (x, y) => clamp(0.3 + 0.6 * (y / hz) + 0.1 * fbm(x * 0.003, y * 0.008, 171)), ['#6e7486', '#868a9a', '#a09ca8', '#bcaeb4', '#d4c0bc', '#e8d8cc'],
+    { flow: FLOW.noise(0.0, 0.2, 0.002, 171), curve: 0.35, gap: 4.6, len: [24, 50], crossAngle: 0.3, crossAmt: 0.35, washAlpha: 0.4 });
+  // Stone and clapboard houses along the street, snow on the roofs, smoke from the chimneys.
+  const houses = [[-40, 300, 250, 'stone'], [270, 210, 220, 'clap'], [490, 260, 280, 'stone'], [760, 200, 230, 'clap'], [970, 190, 260, 'stone']];
+  for (const [x, w, h, kind] of houses) {
+    const top = hz - h, wall = [[x, hz + 8], [x, top], [x + w, top], [x + w, hz + 8]], roof = [[x - 12, top + 4], [x + w / 2, top - 80], [x + w + 12, top + 4]];
+    const pal = kind === 'stone' ? ['#5a5450', '#76706a', '#948c84', '#b0a89e', '#cac2b6'] : ['#5e5040', '#7a6a56', '#96846c', '#b2a086'];
+    yield* pencilG(g, rng, bboxOf(wall), (px, py) => inPoly(wall, px, py), (px, py) => clamp(0.45 + 0.3 * (px - x) / w + (kind === 'stone' ? 0.12 * vnoise2(px * 0.08, py * 0.12, x) : 0.1 * Math.sin(py * 0.6))), pal.map(c => lit(c, L)),
+      { flow: kind === 'stone' ? (px, py) => (rand3(Math.floor(px / 34), Math.floor(py / 20), 3) - 0.5) * 1.6 : () => 0, curve: kind === 'stone' ? 0.4 : 0.05, gap: 2.8, len: kind === 'stone' ? [6, 12] : [16, 30], crossAmt: 0.45 });
+    yield* pencilG(g, rng, bboxOf(roof), (px, py) => inPoly(roof, px, py), () => 0.82, ['#b8bcc8', '#d0d4dc', '#e6e8ee', '#f4f6f8'], { flow: px => (px < x + w / 2 ? -0.55 : 0.55), curve: 0.2, gap: 3, len: [10, 20], cross: false });
+    for (let k = 0; k < Math.floor(w / 70); k++) for (const r2 of [0, 1]) { const wx = x + 30 + k * 70, wy = top + 40 + r2 * 90; if (wy > hz - 60) continue; g.fillStyle = (k + r2 + x) % 3 === 0 ? '#e8b45a' : lit('#23252e', L); g.fillRect(wx, wy, 26, 38); g.strokeStyle = lit('#e6e2da', L); g.lineWidth = 2; g.strokeRect(wx, wy, 26, 38); }
+    g.fillStyle = lit('#2a2420', L); g.fillRect(x + w - 60, hz - 76, 34, 76);
+    g.fillStyle = lit('#4a4440', L); g.fillRect(x + w * 0.7, top - 70, 22, 40);
+    for (const P of [wall, roof]) sketchLine(g, P.concat([P[0]]), rng, 0.8, L.ink, 2, 0.9);
+    yield;
+  }
+  // The snowy street, rutted by wheels.
+  yield* pencilG(g, rng, { x0: -40, y0: hz - 4, x1: 1120, y1: 1960 }, (x, y) => y > hz, (x, y) => clamp(0.66 + 0.14 * fbm(x * 0.006, y * 0.01, 172) - 0.2 * Math.exp(-(((y - 1500 - 0.03 * x) / 8) ** 2)) - 0.2 * Math.exp(-(((y - 1660 - 0.02 * x) / 8) ** 2)) - 0.14 * smooth(clamp((y - 1600) / 400))),
+    ['#6a6e80', '#8a8e9e', '#a8acba', '#c8ccd6', '#e0e2e8', '#f2f3f6'], { flow: FLOW.noise(0.03, 0.12, 0.004, 172), curve: 0.3, gap: 4, len: [20, 44], crossAngle: 0.6, crossAmt: 0.35 });
+}
+const TRN_LAYER = new BoilLayer({ name: 'trenton', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.62, seed: 2601, build: buildTrenton });
+const TRN_GUN = makeGun('trnGun', 2602, { light: TRN_LIGHT, metal: 'bronze', res: 0.9 });
+function drawTrenton(g, t, lt, tick) {
+  const R = TRN, T = R.T, L = TRN_LIGHT;
+  TRN_LAYER.draw(g, tick);
+  for (let k = 0; k < 5; k++) drawSmoke(g, PUFFS, tick, [70, 382, 700, 900, 1150][k], [940, 1000, 950, 1010, 1020][k], (lt * 0.5 + k * 0.9) % 5 + 0.2, { dir: 1, wind: 18, rise: 40, seed: 170 + k, n: 3, size: 0.45, life: 5, alpha: 0.45 });
+  // The gun at the head of the street: it fires once, the crew run it back up.
+  const ga = t - T.gun, rec = ga > 0 ? 60 * Math.exp(-ga * 3) * smooth(clamp(ga / 0.05)) : 0;
+  const mz = drawGun(g, TRN_GUN, tick, 70, 1566, 1.3, 1, rec);
+  drawSmoke(g, PUFFS, tick, mz[0] + 40, mz[1], ga, { dir: 1, wind: 40, seed: 175, n: 6, size: 1.3, life: 6, rise: 8, alpha: 0.9 });
+  drawFlash(g, mz[0] + 10, mz[1], ga, 1, 1.6);
+  // The Hessians: a sentry at first, then men tumbling out of doorways; one fires; all give up.
+  const muzz = [];
+  R.hess.forEach((h, i) => {
+    const out = T.out + h.d, give = T.give + h.d * 0.4;
+    if (t < out && i !== 0) return;
+    let P, x = h.x, dir = -1;
+    if (t < give) {
+      const run = Math.max(0, t - out) * 70;
+      x = h.x + (i ? 60 - Math.min(60, run) : 0);
+      P = i === 0 && t < T.charge ? carry(basePose(), 'shoulder') : carry(basePose(), 'ready');
+      P.lean = -0.06 + 0.1 * Math.sin(t * 6 + i);
+      if (h.fires) { const tf = T.out + 1.6; P = recoil(mixPose(carry(basePose(), 'ready'), carry(basePose(), 'present', { ang: 0.02 }), smooth(invLerp(tf - 0.5, tf - 0.2, t))), t - tf); muzz.push([[x - P.gun.m[0] * h.s, h.y + P.gun.m[1] * h.s], tf]); }
+    } else {
+      const w = smooth(invLerp(give, give + 0.6, t));
+      P = basePose(); P.lean = 0.02; P.head = 0.08;
+      const sh = shoulderOf(P, false), sh2 = shoulderOf(P, true);
+      P.nh = lerp2(armAt(P, false, 0.2), [sh[0] + 14, sh[1] - 58], w); P.fh = lerp2(armAt(P, true, 0), [sh2[0] + 4, sh2[1] - 56], w); P.ne = P.fe = [0.3, 1];
+      if (w < 0.5) carry(P, 'ready');
+      // The musket on the snow.
+      if (w > 0.4) drawLooseMusket(g, [x - 30 * h.s, h.y - 4], [x + 150 * h.s, h.y + 6], tick, L, i);
+    }
+    drawFigure(g, { x, y: h.y, s: h.s, dir, outfit: 'hessian', seed: h.seed, light: L }, P, tick);
+  });
+  for (const [m, at] of muzz) { drawSmoke(g, PUFFS, tick, m[0] - 20, m[1], t - at, { dir: -1, wind: -20, seed: 178, n: 5, size: 0.8, life: 6, rise: 5, alpha: 0.9 }); drawFlash(g, m[0] - 8, m[1], t - at, -1, 0.8); }
+  // The Americans charge in from the left and stop, levelled at the Hessians.
+  R.amer.forEach((m, i) => {
+    const go = T.charge + m.j, stop = go + (m.x + 260) / 330;
+    let P, x;
+    if (t < go) { x = -300; P = carry(basePose(), 'shoulder', { bayonet: true }); }
+    else if (t < stop) { const d = (t - go) * 330 / m.s; x = -260 + d * m.s; P = runPose(d); carry(P, 'ready'); P.nh = onGun(P.gun, 0.2); P.fh = onGun(P.gun, 0.45); }
+    else { x = m.x; P = carry(basePose(), 'present', { ang: t > T.give + 1 ? 0.5 : 0.06 }); P.nf = [18, -FIG.ankle]; P.ff = [-22, -FIG.ankle]; }
+    if (x > -250) drawFigure(g, { x, y: m.y, s: m.s, dir: 1, outfit: m.outfit, seed: m.seed, light: L }, P, tick);
+  });
+  drawSnowfall(g, lt, { layers: [[40, 2.2, 60, 0.6], [30, 3.4, 90, 0.7], [16, 5, 130, 0.8]], wind: 0.5, seed: 27 });
+}
+function camTrenton(lt, t) {
+  const T = TRN.T, ga = t - T.gun, amp = ga > 0 ? 14 * Math.exp(-ga * 6) : 0, u = smooth(clamp(lt / durOf('trenton')));
+  return { z: lerp(1.08, 1.14, u), x: lerp(520, 600, u) + amp * vnoise(t * 30, 1), y: lerp(1260, 1300, u) + amp * vnoise(t * 27, 2), rot: 0 };
+}
+SCN.trenton = { layers: [TRN_LAYER, TRN_GUN.body, TRN_GUN.wheel, ...PUFFS], draw: drawTrenton, cam: camTrenton };
+// A quick march in the snow; the gun; confusion; then a bright brass cadence as the Hessians give up.
+SCORE.trenton = (K, { B, b, s, dur, mel }) => {
+  const { N, one, pz, glock, sn, flam, roll, bd, str, strH, brass } = K, R = TRN, T = R.T;
+  K.hold(s.start, dur, (time, into) => N.windOn(time, into, dur));
+  for (let bb = 0; bb < 6; bb++) { sn(B(bb), 0.14 + 0.06 * bb); sn(B(bb + 0.5), 0.1 + 0.04 * bb); }
+  roll(T.charge - 0.6, T.charge - 0.03, 0.1, 0.6, 0.04);
+  one(T.gun, time => N.volley(time, 2, 0.05, 1)); bd(T.gun, 1, 'G1');
+  mel([[6, 'D5', 0.5], [6.5, 'D5', 0.5], [7, 'A5', 1], [8, 'F#5', 0.5], [8.5, 'D5', 0.5], [9, 'E5', 1], [10, 'F#5', 0.5], [10.5, 'G5', 0.5], [11, 'A5', 0.5], [11.5, 'B5', 0.5], [12, 'A5', 1], [13, 'F#5', 1], [14, 'E5', 0.5], [14.5, 'D5', 0.5], [15, 'E5', 1], [16, 'A4', 1]], 0.6);
+  for (let bb = 6; bb < 17; bb++) { flam(B(bb), 0.45); sn(B(bb + 0.5), 0.3); if (bb % 2 === 0) { bd(B(bb), 0.5); pz(B(bb), 'D2', 0.6, 0.3); } else pz(B(bb), 'A2', 0.5, 0.3); }
+  for (const h of R.hess) if (h.fires) one(T.out + 1.6, time => N.volley(time, 1, 0, 0.8));
+  one(T.give, time => N.clatter(time, 0.6)); one(T.give + 0.3, time => N.clatter(time, 0.5)); one(T.give + 0.5, time => N.clatter(time, 0.5));
+  for (const [bb, n, d] of [[18, 'D4', 1], [19, 'F#4', 1], [20, 'A4', 1], [21, 'D5', 1], [22, 'C#5', 1], [23, 'D5', 1], [24, 'E5', 1], [25, 'F#5', 3]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.6);
+  strH(B(18), s.end - B(18) + 0.3, ['D3', 'A3', 'D4', 'F#4'], 0.4);
+  ['D6', 'F#6', 'A6', 'D7'].forEach((n, k) => glock(B(25) + k * 0.12, n, 0.3, 1.4));
+  roll(B(24), B(25) - 0.03, 0.1, 0.5, 0.04); bd(B(25), 0.7);
+};
+
+/* ========================== scene 19 — Saratoga, 1777 ========================== */
+// Autumn in the Hudson valley: General Burgoyne walks up to General Gates's tent and hands
+// over his sword; Gates gives it back. A whole British army has surrendered.
+const SAR = (() => {
+  const s0 = sceneById.saratoga.start, B = beatOf('saratoga'), T = { swords: cue('saratoga', 'swords') };
+  T.arrive = s0 + 8; T.bow = T.arrive + 0.5; T.take = T.swords + 1.2; T.hold = T.swords + 2.6; T.back = T.swords + 4.4; T.done = T.swords + 5.6;
+  return { s0, B, T, gates: { x: 740, y: 1596, s: 1.8 }, burg: { x: 520, y: 1604, s: 1.8 }, ground: 1600 };
+})();
+const SAR_LIGHT = { tint: '#f4d8a8', amt: 0.08, dark: 0.02, ink: '#23160e', dir: [-0.7, -0.7] };
+function* buildSaratoga(g, rng) {
+  const hz = 1030, L = SAR_LIGHT;
+  yield* pencilG(g, rng, { x0: -40, y0: -40, x1: 1120, y1: hz + 6 }, () => true, (x, y) => clamp(0.35 + 0.55 * (y / hz) + 0.1 * fbm(x * 0.003, y * 0.008, 181)), ['#5e84b0', '#7496bc', '#8eaac8', '#aac0d2', '#c8d4da', '#e4e6de'],
+    { flow: FLOW.noise(-0.1, 0.3, 0.002, 181), curve: 0.4, gap: 4.6, len: [24, 50], crossOff: 0.5, crossAmt: 0.3, washAlpha: 0.36 });
+  const cl = styles([['#fbf6ea', 2.8, 0.7], ['#d6dae0', 2.4, 0.5]], 4);
+  hatch(rng, { x0: -40, y0: 90, x1: 1120, y1: 640 }, { angle: 0, flow: FLOW.noise(0.02, 0.4, 0.006, 182), curve: 0.6, gap: 5, lenMin: 16, lenMax: 36 }, (x, y, r) => { const v = fbm(x * 0.005, y * 0.012, 182); return v > 0.34 && r() < 0.8 ? cl[v > 0.46 ? 0 : 1] : null; });
+  yield* drawStylesG(g, cl);
+  // Far blue hills and the Hudson below them.
+  const hill = x => 900 + 40 * Math.sin(x * 0.005 + 1) + 20 * vnoise(x * 0.01, 7);
+  yield* pencilG(g, rng, { x0: -40, y0: 820, x1: 1120, y1: hz + 20 }, (x, y) => y > hill(x), (x, y) => clamp(0.45 + 0.3 * (y - hill(x)) / 140), ['#6a7a8a', '#7e8e9c', '#94a2ae', '#aab6be'], { flow: FLOW.along(hill), curve: 0.2, gap: 3.4, len: [14, 26], cross: false });
+  yield* pencilG(g, rng, { x0: -40, y0: 980, x1: 1120, y1: 1060 }, (x, y) => y > 1000 && y < 1036 + 10 * Math.sin(x * 0.01), () => 0.6, ['#5a7a92', '#7494a8', '#94aebc'], { angle: 0, wander: 0.04, gap: 2.8, len: [20, 40], cross: false });
+  yield;
+  // Autumn woods: scarlet, orange and gold, scribbled in round crowns.
+  const r = mulberry32(183);
+  const crowns = []; for (let x = -60; x < 1160; x += 50 + r() * 40) crowns.push([x, 1030 + r() * 70, 60 + r() * 50, (r() * 4) | 0]);
+  const PALS = [['#7a2a1a', '#a43a20', '#c8562a', '#e07a3a'], ['#8a4a16', '#b86a1e', '#d88a2a', '#f0b04a'], ['#6a5a1e', '#948026', '#b8a236', '#dcc454'], ['#4a5a2a', '#62743a', '#7e8e4a', '#9aa862']];
+  for (const [x, y, R, k] of crowns) {
+    const inT = (px, py) => Math.hypot(px - x, (py - y) * 1.1) < R * (0.8 + 0.2 * vnoise(Math.atan2(py - y, px - x) * 3, x));
+    yield* scribbleG(g, rng, { x0: x - R, y0: y - R, x1: x + R, y1: y + R }, inT, (px, py) => clamp(0.65 - (py - y) / (2 * R) - (px - x) / (4 * R)), PALS[k], { cell: 11, step: 4, loops: 8, width: 1.8, alpha: 0.85 });
+  }
+  yield;
+  // Beyond, the British lines grounding their arms (tiny, in the meadow).
+  for (let x = 60; x < 540; x += 26) { const P = carry(basePose(), 'order'); drawFigure(g, { x, y: 1150, s: 0.36, dir: 1, outfit: 'redcoat', seed: 400 + x, light: { tint: '#d8c8a0', amt: 0.3, dark: 0, ink: '#4a3a2a' } }, P, (r() * 8) | 0); }
+  // The meadow in the foreground, dry autumn grass.
+  yield* pencilG(g, rng, { x0: -40, y0: 1120, x1: 1120, y1: 1960 }, (x, y) => y > 1160, (x, y) => clamp(0.64 + 0.14 * fbm(x * 0.006, y * 0.01, 184) - 0.26 * smooth(clamp((y - 1500) / 450))), ['#6a5a2a', '#847038', '#a08a48', '#bca460', '#d4bc7c', '#e2cc94'].map(c => lit(c, L)), { flow: FLOW.noise(-1.35, 0.5, 0.01, 184), curve: 0.55, gap: 3.8, len: [9, 18], crossOff: 0.9, crossAmt: 0.5 });
+  yield;
+  // Gates's marquee tent, its door looped open.
+  const tent = [[630, 1590], [640, 1250], [720, 1180], [960, 1180], [1040, 1250], [1050, 1590]], valance = [[640, 1250], [720, 1180], [960, 1180], [1040, 1250], [1040, 1290], [640, 1290]];
+  yield* pencilG(g, rng, bboxOf(tent), (x, y) => inPoly(tent, x, y), (x, y) => clamp(0.8 - 0.3 * (x - 630) / 420 + 0.08 * Math.sin(x * 0.1)), ['#a8a090', '#c2baa8', '#dad2c0', '#ece6d6', '#f6f2e6'].map(c => lit(c, L)), { flow: (x) => -1.57 + 0.15 * Math.sin(x * 0.05), curve: 0.3, gap: 3, len: [20, 40], crossAmt: 0.35 });
+  const door = [[800, 1590], [820, 1330], [870, 1330], [890, 1590]];
+  g.fillStyle = lit('#3a3026', L); g.beginPath(); polyPath(g, door); g.fill();
+  for (let x = 650; x < 1040; x += 26) { g.fillStyle = lit('#e6dcc6', L); g.beginPath(); g.arc(x + 13, 1290, 13, 0, Math.PI); g.fill(); g.strokeStyle = L.ink; g.lineWidth = 1.4; g.stroke(); }
+  for (const P of [tent, valance, door]) sketchLine(g, P.concat([P[0]]), rng, 0.8, L.ink, 2, 0.85);
+  g.strokeStyle = lit('#6a5438', L); g.lineWidth = 3; g.beginPath(); g.moveTo(640, 1250); g.lineTo(560, 1590); g.moveTo(1040, 1250); g.lineTo(1100, 1590); g.stroke();
+}
+const SAR_LAYER = new BoilLayer({ name: 'saratoga', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.62, seed: 2701, build: buildSaratoga });
+function drawSword(g, hilt, tip, L) {
+  const P = capsule(hilt, tip, 5, 2, 1);
+  g.fillStyle = lit('#c4c8ca', L); g.beginPath(); polyPath(g, P); g.fill(); g.strokeStyle = L.ink; g.lineWidth = 1.4; g.stroke();
+  const u = [tip[0] - hilt[0], tip[1] - hilt[1]], l = Math.hypot(u[0], u[1]) || 1, n = [-u[1] / l, u[0] / l];
+  g.strokeStyle = lit('#c9a55a', L); g.lineWidth = 5; g.beginPath(); g.moveTo(hilt[0] + n[0] * 12, hilt[1] + n[1] * 12); g.lineTo(hilt[0] - n[0] * 12, hilt[1] - n[1] * 12); g.stroke();
+  g.strokeStyle = lit('#3a2a1c', L); g.lineWidth = 6; g.beginPath(); g.moveTo(hilt[0], hilt[1]); g.lineTo(hilt[0] - u[0] / l * 18, hilt[1] - u[1] / l * 18); g.stroke();
+}
+function drawSaratoga(g, t, lt, tick) {
+  const S = SAR, T = S.T, L = SAR_LIGHT;
+  SAR_LAYER.draw(g, tick);
+  drawPole(g, 1000, 900, 1592, tick, L, 7);
+  drawFlag(g, FLAGS.us, tick, 997, 906, 210, 138, lt, { dir: -1, amp: 11, waves: 1.3, speed: 1.1 });
+  // Gates's officers, then Gates.
+  for (const [x, o, sd] of [[880, 'continental', 291], [960, 'gates', 292]]) { const P = basePose(); P.lean = 0.02; drawFigure(g, { x, y: S.ground - 6, s: 1.7, dir: -1, outfit: o === 'gates' ? 'continental' : o, seed: sd, light: L }, P, tick); }
+  const G = S.gates, locG = w => [(w[0] - G.x) / (-1 * G.s), (w[1] - G.y) / G.s];
+  const gp = basePose(); gp.lean = 0.03; gp.nf = [8, -FIG.ankle]; gp.ff = [-10, -FIG.ankle];
+  // The sword's path from Burgoyne to Gates and back.
+  const B2 = S.burg, bx = t < T.arrive ? lerp(-180, B2.x, smooth(invLerp(S.s0 + 0.5, T.arrive, t))) : B2.x;
+  const mid = [(bx + G.x) / 2 + 10, 1330];
+  let hilt, tip, bHand = null, gHand = null;
+  if (t < T.swords) { hilt = null; }
+  else if (t < T.take) { const u = smooth(invLerp(T.swords, T.swords + 0.6, t)); hilt = [lerp(bx + 40, mid[0] + 60, u), lerp(1420, 1330, u)]; tip = [hilt[0] - 180, hilt[1] + 6]; bHand = lerp2(hilt, tip, 0.35); gHand = t > T.take - 0.4 ? hilt : null; }
+  else if (t < T.hold) { hilt = [mid[0] + 60, 1330]; tip = [hilt[0] - 180, 1336]; gHand = hilt; bHand = t < T.take + 0.4 ? lerp2(hilt, tip, 0.35) : null; }
+  else if (t < T.back) { const u = smooth(invLerp(T.hold, T.hold + 0.6, t)); hilt = lerp2([mid[0] + 60, 1330], [G.x - 40, 1380], u); tip = lerp2([mid[0] - 120, 1336], [G.x - 60, 1180], u); gHand = hilt; }
+  else if (t < T.done) { const u = smooth(invLerp(T.back, T.back + 0.6, t)); hilt = lerp2([G.x - 40, 1380], [mid[0] - 40, 1334], u); tip = lerp2([G.x - 60, 1180], [mid[0] + 140, 1340], u); gHand = lerp2(hilt, tip, 0.3); bHand = t > T.back + 0.5 ? hilt : null; }
+  else { const u = smooth(invLerp(T.done, T.done + 0.7, t)); hilt = lerp2([mid[0] - 40, 1334], [bx + 30, 1440], u); tip = lerp2([mid[0] + 140, 1340], [bx + 90, 1600], u); bHand = hilt; }
+  if (gHand) { gp.nh = locG(gHand); gp.ne = [-0.3, 1]; }
+  gp.head = t > T.take && t < T.back ? 0.12 : 0;
+  drawFigure(g, { x: G.x, y: G.y, s: G.s, dir: -1, outfit: 'gates', seed: 293, light: L }, gp, tick);
+  // Burgoyne and his officers walk up; he doffs his hat and bows, and offers the sword.
+  const follow = [[-150, 'officerRed', 294], [-260, 'hessian', 295]];
+  for (const [dx, o, sd] of follow) {
+    const x = bx + dx, walking = t < T.arrive, d = (x + 400) / 1.7;
+    const P = walking ? walkPose(d, 118) : basePose();
+    if (o === 'hessian') carry(P, 'shoulder');
+    if (x > -200) drawFigure(g, { x, y: S.ground + 8, s: 1.72, dir: 1, outfit: o, seed: sd, light: L }, P, tick);
+  }
+  const bow = pulse(t, T.bow + 0.4, 0.4, 0.8) + 0.6 * pulse(t, T.done + 1, 0.4, 0.8), hatOff = t > T.bow;
+  const bp = t < T.arrive ? walkPose((bx + 400) / B2.s, 118) : basePose();
+  bp.lean += 0.35 * bow;
+  const locB = w => [(w[0] - bx) / B2.s, (w[1] - B2.y) / B2.s];
+  if (hatOff) { const sh2 = shoulderOf(bp, true); bp.fh = [sh2[0] - 14, sh2[1] + 40]; bp.fe = [-1, 0.2]; }
+  if (bHand) { bp.nh = locB(bHand); bp.ne = [-0.4, 1]; }
+  const bo = drawFigure(g, { x: bx, y: B2.y, s: B2.s, dir: 1, outfit: 'officerRed', seed: 296, light: L, hideHat: hatOff }, bp, tick);
+  if (hatOff) { g.fillStyle = lit('#1f1c1a', L); g.beginPath(); g.ellipse(bo.farHand[0] - 6, bo.farHand[1] + 10, 26, 10, 0.3, 0, TAU); g.fill(); g.strokeStyle = lit('#e2c56e', L); g.lineWidth = 2; g.stroke(); }
+  if (hilt) drawSword(g, hilt, tip, L);
+}
+function camSaratoga(lt) { const u = smooth(clamp(lt / durOf('saratoga'))); return { z: lerp(1.04, 1.16, u), x: lerp(520, 640, u), y: lerp(1150, 1260, u), rot: 0 }; }
+SCN.saratoga = { layers: [SAR_LAYER, FLAGS.us], draw: drawSaratoga, cam: camSaratoga };
+// The British march in the minor for the long walk; the sword offered to a hush; then the
+// turning point: the tune in the major, horns and bells.
+SCORE.saratoga = (K, { B, b, s, dur, mel }) => {
+  const { N, one, bell, pz, glock, sn, flam, roll, bd, str, strH, brass } = K, T = SAR.T;
+  for (let bb = 0; bb < 16; bb++) { if (bb % 2 === 0) { flam(B(bb), 0.3); bd(B(bb), 0.35); } else sn(B(bb), 0.2); sn(B(bb + 0.5), 0.1); }
+  mel([[0, 'D5', 1.5], [1.5, 'C5', 0.5], [2, 'Bb4', 1], [3, 'A4', 1], [4, 'G4', 1.5], [5.5, 'A4', 0.5], [6, 'Bb4', 1], [7, 'A4', 1], [8, 'D5', 1.5], [9.5, 'E5', 0.5], [10, 'F5', 1], [11, 'E5', 1], [12, 'D5', 2], [14, 'C#5', 2]], 0.44);
+  for (const [bb, d, n] of [[0, 4, ['D3', 'F3', 'A3']], [4, 4, ['G2', 'Bb2', 'D3']], [8, 4, ['Bb2', 'D3', 'F3']], [12, 4, ['A2', 'C#3', 'E3']]]) str(B(bb), d * b + 0.1, n, 0.3);
+  for (let bb = 0; bb < 16; bb += 2) pz(B(bb), ['D2', 'D2', 'G1', 'G1', 'Bb1', 'Bb1', 'A1', 'A1'][bb / 2], 0.55, 0.4);
+  strH(T.arrive, T.swords - T.arrive, ['A2', 'E3', 'A3'], 0.24);
+  roll(T.swords - 1.2, T.swords - 0.03, 0.04, 0.4, 0.04);
+  bell(T.swords, 'D3', 0.6, 5); bell(T.take, 'A3', 0.45, 4);
+  for (const [bb, d, n] of [[21, 3, ['D3', 'A3', 'D4', 'F#4']], [24, 3, ['G2', 'D3', 'B3', 'G4']], [27, 3, ['A2', 'E3', 'C#4', 'A4']], [30, 4, ['D3', 'A3', 'D4', 'F#4']], [34, 3, ['B2', 'F#3', 'D4', 'B4']], [37, 3, ['A2', 'E3', 'C#4', 'A4']]]) str(B(bb), d * b + 0.15, n, 0.42);
+  for (const [bb, n, d] of [[22, 'A4', 1], [23, 'D5', 1], [24, 'B4', 1], [25, 'D5', 1], [26, 'E5', 1], [27, 'C#5', 1], [28, 'A4', 1], [29, 'E5', 1], [30, 'F#5', 2], [32, 'E5', 1], [33, 'D5', 1], [34, 'D5', 1], [35, 'B4', 1], [36, 'A4', 2], [38, 'D5', 2]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.56);
+  strH(B(38), s.end - B(38) + 0.3, ['D3', 'A3', 'D4', 'F#4'], 0.44);
+  ['D6', 'F#6', 'A6'].forEach((n, k) => glock(B(38) + k * 0.14, n, 0.3, 1.5));
+  bell(B(38), 'D3', 0.5, 5); bd(B(38), 0.6);
+};
+
+/* ======================== scene 20 — Valley Forge, 1777–78 ===================== */
+// Winter camp: log huts in the snow, men in blankets around a fire; then Baron von Steuben
+// drills a squad until it marches in step and presents arms as one.
+const VAL = (() => {
+  const s0 = sceneById.valley.start, B = beatOf('valley'), bl = beatLen('valley'), T = { drill: cue('valley', 'drill'), step: cue('valley', 'step'), present: cue('valley', 'present') };
+  const squad = [0, 1, 2, 3, 4].map(i => ({ i, off: i * 92, seed: 300 + i, outfit: ['ragged', 'continental', 'raggedB', 'militiaA', 'continental'][i], ph: [0, 0.37, 0.15, 0.61, 0.29][i] }));
+  return { s0, B, bl, T, squad, fire: [250, 1618], lineY: 1540, stepLen: 2 * bl };
+})();
+const VAL_LIGHT = { tint: '#c8ccd8', amt: 0.16, dark: 0.08, ink: '#1c1a22', dir: [-0.6, -0.8] };
+function* buildValleyForge(g, rng) {
+  const hz = 1080, L = VAL_LIGHT;
+  yield* pencilG(g, rng, { x0: -40, y0: -40, x1: 1120, y1: hz + 6 }, () => true, (x, y) => clamp(0.4 + 0.45 * (y / hz) + 0.12 * fbm(x * 0.003, y * 0.006, 191)), ['#6c7280', '#828896', '#9aa0aa', '#b4b8be', '#cccfd2', '#e0e2e2'],
+    { flow: FLOW.noise(-0.2, 0.5, 0.0025, 191), curve: 0.4, gap: 4.4, len: [24, 50], crossAngle: 0.5, crossAmt: 0.4, washAlpha: 0.42 });
+  // Snowy slopes, one behind the other.
+  const far = x => 980 + 40 * Math.sin(x * 0.004 + 1.2), mid = x => 1120 + 50 * Math.sin(x * 0.003 + 0.3);
+  yield* pencilG(g, rng, { x0: -40, y0: 900, x1: 1120, y1: 1300 }, (x, y) => y > far(x), (x, y) => clamp(0.7 - 0.2 * (y - far(x)) / 200), ['#8e96a6', '#a8b0bc', '#c4cad2', '#dcdfe4', '#eceef0'], { flow: FLOW.along(far), curve: 0.2, gap: 3.8, len: [16, 30], cross: false });
+  // Bare trees on the far ridge.
+  const r = mulberry32(193);
+  g.strokeStyle = '#4a4650'; g.lineCap = 'round';
+  for (let k = 0; k < 16; k++) {
+    const x = r() * 1120, y = far(x) + 4, h = 60 + r() * 60;
+    g.lineWidth = 3; g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - h);
+    for (let b = 0; b < 6; b++) { const by = y - h * (0.3 + 0.6 * r()), bd = (r() < 0.5 ? -1 : 1); g.moveTo(x, by); g.lineTo(x + bd * (10 + 20 * r()), by - 14 - 16 * r()); }
+    g.stroke();
+  }
+  yield;
+  // Rows of log huts, with clay chimneys.
+  const huts = [];
+  for (const [y0, sc, n, x0] of [[1070, 0.55, 8, -20], [1160, 0.8, 6, 30]]) for (let k = 0; k < n; k++) huts.push([x0 + k * (1140 / n) + r() * 30, y0 + r() * 16, sc]);
+  for (const [x, y, sc] of huts) {
+    const w = 170 * sc, h = 90 * sc, wall = [[x, y], [x, y - h], [x + w, y - h], [x + w, y]], roof = [[x - 12 * sc, y - h + 6], [x + w * 0.5, y - h - 46 * sc], [x + w + 12 * sc, y - h + 6]];
+    yield* pencilG(g, rng, bboxOf(wall), (px, py) => inPoly(wall, px, py), (px, py) => clamp(0.35 + 0.25 * Math.sin((py - y) / (12 * sc) * Math.PI) + 0.1 * vnoise2(px * 0.05, py * 0.05, 3)), ['#3a2c20', '#524030', '#6c5640', '#86704f'].map(c => lit(c, L)), { flow: () => 0.02, curve: 0.2, gap: 2.6, len: [10, 24], cross: false });
+    g.strokeStyle = lit('#2a1e14', L); g.lineWidth = 1.4 * sc + 0.6; g.beginPath(); for (let yy = y - 12 * sc; yy > y - h; yy -= 12 * sc) { g.moveTo(x, yy); g.lineTo(x + w, yy); } g.stroke();
+    yield* pencilG(g, rng, bboxOf(roof), (px, py) => inPoly(roof, px, py), () => 0.85, ['#b8bcc6', '#d2d6dc', '#e8eaee', '#f6f7f8'], { flow: px => (px < x + w / 2 ? -0.45 : 0.45), curve: 0.2, gap: 2.8, len: [8, 16], cross: false });
+    g.fillStyle = lit('#7a5a44', L); g.fillRect(x + w * 0.72, y - h - 52 * sc, 20 * sc, 40 * sc);
+    g.fillStyle = lit('#2a2018', L); g.fillRect(x + w * 0.4, y - 56 * sc, 30 * sc, 56 * sc);
+    for (const P of [wall, roof]) sketchLine(g, P.concat([P[0]]), rng, 0.6, L.ink, 1.6, 0.85);
+  }
+  yield;
+  // The trampled snow of the parade ground.
+  yield* pencilG(g, rng, { x0: -40, y0: 1100, x1: 1120, y1: 1960 }, (x, y) => y > mid(x) + 60 || y > 1240, (x, y) => clamp(0.7 + 0.12 * fbm(x * 0.006, y * 0.012, 194) - 0.16 * smooth(clamp((y - 1500) / 400)) - (Math.abs(y - 1560) < 30 ? 0.12 : 0)), ['#6e7486', '#8c92a2', '#aab0bc', '#c8ccd4', '#e0e2e8', '#f2f3f6'],
+    { flow: FLOW.noise(0.05, 0.3, 0.006, 194), curve: 0.35, gap: 4, len: [16, 36], crossAngle: 0.7, crossAmt: 0.35 });
+  // A log to sit on by the fire.
+  const lg = [[120, 1626], [300, 1616], [304, 1646], [118, 1654]];
+  g.fillStyle = lit('#5a4030', L); g.beginPath(); polyPath(g, lg); g.fill(); sketchLine(g, lg.concat([lg[0]]), rng, 0.6, L.ink, 1.8, 0.9);
+}
+const VAL_LAYER = new BoilLayer({ name: 'valleyForge', box: { x0: -40, y0: -40, x1: 1120, y1: 1960 }, res: 0.62, seed: 2801, build: buildValleyForge });
+function drawValley(g, t, lt, tick) {
+  const V = VAL, T = V.T, L = VAL_LIGHT;
+  VAL_LAYER.draw(g, tick);
+  for (let k = 0; k < 6; k++) drawSmoke(g, PUFFS, tick, 110 + k * 180, 1000 + (k % 2) * 60, (lt * 0.45 + k * 1.1) % 5 + 0.3, { dir: 1, wind: 24, rise: 36, seed: 190 + k, n: 3, size: 0.4, life: 5, alpha: 0.4 });
+  // The campfire and the men around it, blankets pulled tight; their breath smokes.
+  const [fx, fy] = V.fire;
+  drawFlames(g, [[fx - 16, fy, 18, 1], [fx, fy + 2, 24, 2], [fx + 18, fy, 17, 3], [fx + 6, fy - 2, 14, 4]], lt, { sparks: 8, seed: 5, glowA: 0.34, glowStep: 1 });
+  drawSmoke(g, PUFFS, tick, fx, fy - 60, (lt * 0.8) % 3 + 0.2, { dir: 1, wind: 20, rise: 50, seed: 199, n: 3, size: 0.5, life: 3, alpha: 0.4 });
+  const warm = (P, near) => { const sh = shoulderOf(P, false); P.nh = [sh[0] + 42, sh[1] + 50]; P.fh = [sh[0] + 36, sh[1] + 54]; P.ne = P.fe = [-0.3, 1]; return P; };
+  const men = [[118, 1640, 1, 'ragged', 1.6, true], [390, 1650, -1, 'raggedB', 1.66, false], [300, 1690, -1, 'ragged', 1.7, false]];
+  const heads = [];
+  men.forEach(([x, y, dir, o, s2, seated], i) => {
+    const P = seated ? seatPose({ lean: 0.25, head: 0.15 }) : basePose();
+    if (!seated) { P.lean = 0.1 + 0.03 * Math.sin(t * 1.3 + i); P.nf = [6, -FIG.ankle]; P.ff = [-8 + 4 * Math.max(0, Math.sin(t * 5 + i * 2)), -FIG.ankle - 6 * Math.max(0, Math.sin(t * 5 + i * 2))]; }
+    warm(P);
+    const out = drawFigure(g, { x, y: seated ? y + 20 : y, s: s2, dir, outfit: o, seed: 310 + i, light: L }, P, tick);
+    heads.push([out.headC, dir]);
+  });
+  for (const [[hx, hy], dir] of heads) { const a = (lt * 0.7 + hx * 0.01) % 2.6; if (a < 0.9) drawSmoke(g, PUFFS, tick, hx + dir * 24, hy + 6, a, { dir, wind: dir * 20, rise: 10, seed: (hx | 0), n: 1, size: 0.16, life: 0.9, alpha: 0.5 }); }
+  // Steuben and his squad. First a shambles, then in step, then presenting arms as one.
+  const st = basePose(), cmd = Math.max(0, Math.sin((t - T.drill) * TAU / (2 * V.bl))) * (t > T.drill && t < T.present + 1 ? 1 : 0);
+  const sh = shoulderOf(st, false); st.nh = lerp2(armAt(st, false, 0.2), [sh[0] + 30, sh[1] - 50], cmd); st.ne = [0.2, 1]; st.lean = 0.04; st.head = -0.06;
+  drawFigure(g, { x: 1000, y: 1500, s: 1.6, dir: -1, outfit: 'steuben', seed: 306, light: L }, st, tick);
+  const inStep = smooth(invLerp(T.step - 0.3, T.step + 0.3, t)), marching = t > T.drill && t < T.present;
+  for (const m of V.squad) {
+    const x0 = 500 + m.off, d = marching ? (t - T.drill) * 118 / (2 * V.bl) : 0;
+    let P;
+    if (!marching && t < T.drill) { P = carry(basePose(), 'order', { bayonet: false }); P.lean = 0.12; P.head = 0.1; }
+    else if (marching) {
+      const ph = lerp(m.ph * 118, 0, inStep), wobble = (1 - inStep) * 0.06 * Math.sin(t * 7 + m.i);
+      P = carry(walkPose(d + ph, 118), 'shoulder', { bayonet: false }); P.lean += wobble; P.ffa = P.nfa = 0;
+      // Marking time in place: feet go up and down but the man stays put.
+      P.nf = [P.nf[0] * 0.25, P.nf[1]]; P.ff = [P.ff[0] * 0.25, P.ff[1]];
+    } else { const w = smooth(invLerp(T.present, T.present + 0.4, t)); P = mixPose(carry(basePose(), 'shoulder', { bayonet: false }), carry(basePose(), 'ready', { bayonet: false }), w); }
+    drawFigure(g, { x: x0, y: V.lineY + (m.i % 2) * 10, s: 1.5, dir: 1, outfit: m.outfit, seed: m.seed, light: L }, P, tick);
+  }
+  drawSnowfall(g, lt, { layers: [[36, 2.2, 50, 0.55], [26, 3.2, 80, 0.65], [12, 4.6, 120, 0.75]], wind: 0.4, seed: 29 });
+}
+function camValley(lt, t) {
+  const T = VAL.T, s0 = VAL.s0, dur = durOf('valley');
+  return { z: track([[0, 1.3], [T.drill - s0 - 1.5, 1.26], [T.drill - s0 + 1.5, 1.08], [dur, 1.12]])(lt), x: track([[0, 330], [T.drill - s0 - 1.5, 360], [T.drill - s0 + 1.5, 640], [dur, 660]])(lt), y: track([[0, 1400], [T.drill - s0 - 1.5, 1400], [T.drill - s0 + 1.5, 1250], [dur, 1270]])(lt), rot: 0 };
+}
+SCN.valley = { layers: [VAL_LAYER, ...PUFFS], draw: drawValley, cam: camValley };
+// Wind and a lonely fife by the fire; then a drum that can't keep time until it does, and
+// strings that rise toward spring.
+SCORE.valley = (K, { B, b, s, dur, mel }) => {
+  const { N, one, hold, glock, pz, sn, flam, roll, bd, str, strH, brass } = K, V = VAL, T = V.T;
+  hold(s.start, dur, (time, into) => N.windOn(time, into, dur));
+  hold(s.start, T.drill - s.start + 1, (time, into) => N.fireOn(time, into, T.drill - s.start + 1, 0.25));
+  hold(s.start, T.drill - s.start + 1, (time, into) => N.droneOn(['D2', 'A2'], time, into, T.drill - s.start + 1, 0.4));
+  mel([[1, 'A4', 1.5], [2.5, 'G4', 0.5], [3, 'F4', 1], [4, 'E4', 1], [5, 'D4', 2], [7, 'F4', 1], [8, 'A4', 1], [9, 'G4', 1.5], [10.5, 'E4', 0.5], [11, 'D4', 1]], 0.34);
+  strH(B(1), T.drill - B(1), ['D3', 'F3', 'A3'], 0.16);
+  const cr = mulberry32(41);
+  for (let t = s.start + 0.3; t < T.drill; t += 0.2 + 0.5 * cr()) one(t, time => N.crackle(time, 0.12 + 0.12 * cr()));
+  // The drill: ragged at first, then locked in step.
+  for (let t = T.drill, k = 0; t < T.present - 0.05; t += V.bl, k++) {
+    const jit = (1 - smooth(invLerp(T.step - 0.3, T.step + 0.3, t))) * 0.12 * (cr() - 0.5);
+    if (k % 2 === 0) { flam(t + jit, 0.45); bd(t + jit, 0.4); } else sn(t + jit, 0.34); sn(t + V.bl * 0.5 + jit, 0.16);
+  }
+  for (const [bb, d, n] of [[12, 3, ['D3', 'F3', 'A3']], [15, 2, ['Bb2', 'D3', 'F3']], [17, 3, ['D3', 'F#3', 'A3']], [20, 2, ['G2', 'D3', 'B3']], [22, 2, ['A2', 'E3', 'C#4']]]) str(B(bb), d * b + 0.1, n, 0.34);
+  mel([[17, 'D5', 1], [18, 'F#5', 1], [19, 'A5', 1], [20, 'G5', 1], [21, 'B5', 1], [22, 'A5', 1], [23, 'E5', 1]], 0.46);
+  for (let k = 0; k < 5; k++) one(T.present + k * 0.02, time => N.click(time, 0.6));
+  one(T.present + 0.1, time => N.clatter(time, 0.5)); bd(T.present, 0.7);
+  for (const [bb, n, d] of [[24, 'D4', 1], [25, 'F#4', 1], [26, 'A4', 1], [27, 'D5', 3]]) brass(B(bb), d * b * 0.95, [n, K.up(n, -12)], 0.6);
+  strH(B(24), s.end - B(24) + 0.3, ['D3', 'A3', 'D4', 'F#4'], 0.42);
+  ['A5', 'D6', 'F#6', 'A6'].forEach((n, k) => glock(B(27) + k * 0.14, n, 0.3, 1.6));
+};
+
+/* ======================= scene 21 — the French alliance, 1778 ==================== */
+// A gilded Paris salon: Benjamin Franklin signs the treaty of alliance while a French minister
+// looks on; the two flags come together.
+const FRA = (() => {
+  const s0 = sceneById.france.start, B = beatOf('france'), T = { sign: cue('france', 'sign') };
+  T.flags = T.sign + 2.4;
+  return { s0, B, T, table: { x0: 300, x1: 800, top: 1360 }, floor: 1610 };
+})();
+const SALON_LIGHT = { tint: '#f6dcb0', amt: 0.08, dark: 0.02, ink: '#23160e', dir: [0.7, -0.7] };
+function* buildSalon(g, rng) {
+  const F = FRA, box = { x0: -40, y0: -40, x1: 1120, y1: 1960 }, L = SALON_LIGHT;
+  // Pale blue-green panelling with gilded frames.
+  yield* pencilG(g, rng, box, (x, y) => y < 1250, (x, y) => clamp(0.6 + 0.1 * fbm(x * 0.004, y * 0.004, 201) - 0.2 * smooth(clamp((240 - y) / 200)) + 0.1 * Math.exp(-Math.hypot(x - 540, y - 300) / 400)), ['#5e7e84', '#74949a', '#8aaaae', '#a2c0c0', '#bcd4d0', '#d4e4de'],
+    { flow: FLOW.noise(-1.57, 0.2, 0.004, 201), curve: 0.15, gap: 4.4, len: [16, 34], crossAngle: 0, crossAmt: 0.3, washAlpha: 0.4 });
+  const gold = ['#8a6a24', '#b08a34', '#d0aa4c', '#ecd07a'];
+  const frame = (x0, y0, x1, y1, r = 30) => {
+    g.strokeStyle = gold[1]; g.lineWidth = 9; g.beginPath(); g.roundRect ? g.roundRect(x0, y0, x1 - x0, y1 - y0, r) : g.rect(x0, y0, x1 - x0, y1 - y0); g.stroke();
+    g.strokeStyle = gold[3]; g.lineWidth = 2.4; g.beginPath(); g.roundRect ? g.roundRect(x0 + 3, y0 + 3, x1 - x0 - 6, y1 - y0 - 6, r) : g.rect(x0 + 3, y0 + 3, x1 - x0 - 6, y1 - y0 - 6); g.stroke();
+    for (const [cx, cy] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) { g.fillStyle = gold[2]; g.beginPath(); g.arc(cx + (cx === x0 ? 16 : -16), cy + (cy === y0 ? 16 : -16), 10, 0, TAU); g.fill(); }
+    sketchLine(g, [[x0 - 5, y0 - 5], [x1 + 5, y0 - 5], [x1 + 5, y1 + 5], [x0 - 5, y1 + 5]], rng, 0.8, '#4a3410', 1.4, 0.6, true);
+  };
+  for (const [x0, x1] of [[40, 300], [360, 720], [780, 1040]]) { frame(x0, 300, x1, 820); frame(x0, 900, x1, 1180, 16); }
+  // A tall mirror in the middle panel, catching the chandelier.
+  yield* pencilG(g, rng, { x0: 390, y0: 330, x1: 690, y1: 790 }, () => true, (x, y) => clamp(0.55 + 0.25 * Math.sin((x - y) * 0.01) + 0.1 * fbm(x * 0.01, y * 0.01, 202)), ['#6a7e88', '#8aa0a8', '#aec2c6', '#d0dede'], { angle: -0.9, wander: 0.1, curve: 0.1, gap: 3.4, len: [20, 44], cross: false });
+  g.strokeStyle = 'rgba(255,250,235,0.5)'; g.lineWidth = 3; g.beginPath(); for (const o of [0, 30, 50]) { g.moveTo(420 + o, 780); g.lineTo(560 + o, 360); } g.stroke();
+  // Cornice.
+  g.fillStyle = '#e8ddc2'; g.fillRect(-40, 190, 1160, 40); g.fillStyle = gold[2]; g.fillRect(-40, 226, 1160, 8);
+  sketchLine(g, [[-40, 190], [1120, 190]], rng, 0.8, '#6a5a44', 2, 0.8);
+  yield;
+  // Red velvet drapes on the right, heavy folds.
+  const drape = [[930, 200], [1120, 200], [1120, 1260], [990, 1260], [960, 900], [940, 500]];
+  yield* pencilG(g, rng, bboxOf(drape), (x, y) => inPoly(drape, x, y), (x, y) => clamp(0.4 + 0.3 * Math.sin(x * 0.07 + y * 0.002) + 0.1 * fbm(x * 0.02, y * 0.01, 203)), ['#4a0e12', '#6a1618', '#8a2222', '#a83a30', '#c85a44'], { flow: (x) => -1.57 + 0.1 * Math.sin(x * 0.07), curve: 0.2, gap: 3, len: [24, 50], crossAmt: 0.5 });
+  sketchLine(g, drape.concat([drape[0]]), rng, 1, '#2a0808', 2.2, 0.9);
+  g.strokeStyle = gold[2]; g.lineWidth = 6; g.beginPath(); g.moveTo(980, 760); g.quadraticCurveTo(1040, 800, 1100, 760); g.stroke();
+  // Parquet in a herringbone: each tile's strokes turn the other way.
+  const tileAng = (x, y) => { const k = Math.floor((x + y * 1.4) / 46) + Math.floor((x - y * 1.4) / 46); return k % 2 ? 0.78 : -0.78; };
+  yield* pencilG(g, rng, { x0: -40, y0: 1240, x1: 1120, y1: 2200 }, (x, y) => y > 1250, (x, y) => clamp(0.55 + 0.14 * (Math.floor((x + y * 1.4) / 46) % 3) / 3 + 0.1 * fbm(x * 0.01, y * 0.01, 204) - 0.18 * smooth(clamp((y - 1500) / 400))), ['#5e3a1c', '#7a4e26', '#966432', '#b07c44', '#c89658'], { flow: tileAng, curve: 0.05, gap: 3, len: [10, 22], jitter: 0.06, crossAmt: 0.3 });
+  g.strokeStyle = 'rgba(40,20,8,0.45)'; g.lineWidth = 1.4; g.beginPath();
+  for (let k = -40; k < 60; k++) { const c = k * 46; for (const s2 of [1, -1]) { g.moveTo(c - 400 * s2, 1250); for (let y = 1250; y <= 2200; y += 40) g.lineTo(c - (y - 1250) * 1.4 * s2 * 0.5, y); } }
+  g.stroke();
+  sketchLine(g, [[-40, 1250], [1120, 1250]], rng, 1, '#3a2410', 2.4, 0.9);
+  // The table: a gilded bureau plat with a green leather top.
+  const T2 = F.table, top = [[T2.x0, T2.top], [T2.x1, T2.top], [T2.x1 + 14, T2.top + 30], [T2.x0 - 14, T2.top + 30]];
+  g.fillStyle = '#2e4a34'; g.beginPath(); polyPath(g, top); g.fill(); sketchLine(g, top.concat([top[0]]), rng, 0.6, '#1a1008', 1.8, 0.9);
+  const apron = [[T2.x0 - 14, T2.top + 30], [T2.x1 + 14, T2.top + 30], [T2.x1 + 6, T2.top + 70], [T2.x0 - 6, T2.top + 70]];
+  yield* pencilG(g, rng, bboxOf(apron), (x, y) => inPoly(apron, x, y), (x) => clamp(0.4 + 0.4 * Math.abs(Math.sin(x * 0.03))), gold, { angle: 0, wander: 0.05, gap: 2.4, len: [8, 16], cross: false });
+  for (const lx of [T2.x0 + 10, T2.x1 - 10]) { g.strokeStyle = gold[1]; g.lineWidth = 12; g.beginPath(); g.moveTo(lx, T2.top + 70); g.bezierCurveTo(lx + (lx < 500 ? -30 : 30), T2.top + 140, lx + (lx < 500 ? 20 : -20), T2.top + 200, lx, F.floor); g.stroke(); }
+  // Inkstand and candlesticks on the table.
+  g.fillStyle = gold[2]; g.fillRect(700, T2.top - 30, 60, 30); g.fillStyle = '#18181c'; g.fillRect(712, T2.top - 44, 16, 16);
+  for (const cx of [340, 770]) { g.fillStyle = gold[2]; g.fillRect(cx - 5, T2.top - 90, 10, 90); g.fillStyle = '#f2ead4'; g.fillRect(cx - 4, T2.top - 140, 8, 50); }
+}
+const FRA_LAYER = new BoilLayer({ name: 'salon', box: { x0: -40, y0: 520, x1: 1120, y1: 2200 }, res: 0.8, seed: 2901, build: buildSalon });
+function drawFrance(g, t, lt, tick) {
+  const F = FRA, T = F.T, L = SALON_LIGHT, T2 = F.table;
+  FRA_LAYER.draw(g, tick);
+  // The chandelier: candles and glittering drops.
+  const cx = 540, cy = 250;
+  g.strokeStyle = '#b08a34'; g.lineWidth = 4; g.beginPath(); g.moveTo(cx, 0); g.lineTo(cx, cy); g.stroke();
+  g.strokeStyle = '#d0aa4c'; g.lineWidth = 5; g.beginPath(); for (let k = 0; k < 7; k++) { const x = cx - 150 + k * 50; g.moveTo(cx, cy); g.quadraticCurveTo(x, cy + 70, x, cy + 30); } g.stroke();
+  for (let k = 0; k < 7; k++) { const x = cx - 150 + k * 50; g.fillStyle = '#f2ead4'; g.fillRect(x - 4, cy - 4, 8, 34); drawFlames(g, [[x, cy - 4, 5, k]], lt, { glowA: 0.4, glowStep: 1 }); }
+  for (let k = 0; k < 26; k++) { const a = rand3(k, 3, 3), x = cx - 160 + a * 320, y = cy + 40 + 60 * rand3(k, 4, 4), tw = 0.5 + 0.5 * Math.sin(lt * 3 + k * 2); g.fillStyle = `rgba(255,252,240,${0.5 + 0.5 * tw})`; g.beginPath(); g.arc(x, y, 3 + 2 * tw, 0, TAU); g.fill(); }
+  // Commissioners behind Franklin; the minister across the table.
+  for (const [x, o, sd, dir] of [[252, 'delegateA', 321, 1], [322, 'delegateC', 322, 1]]) { const P = basePose(); P.lean = 0.04; P.head = 0.1; P.nh = [16, -110]; P.fh = [10, -112]; P.ne = P.fe = [-1, 0.3]; drawFigure(g, { x, y: F.floor - 20, s: 1.72, dir, outfit: o, seed: sd, light: L }, P, tick); }
+  const mp = basePose(); mp.lean = 0.12 + 0.06 * smooth(invLerp(T.sign - 1, T.sign, t)); mp.head = 0.2; mp.fh = [-24, -104]; mp.fe = [-1, -0.2];
+  const bow = pulse(t, T.sign + 1.2, 0.4, 0.8); mp.lean += 0.3 * bow;
+  drawFigure(g, { x: 872, y: F.floor, s: 1.85, dir: -1, outfit: 'minister', seed: 323, light: L }, mp, tick);
+  // Franklin, seated, dips his pen and signs.
+  const fp = seatPose({ lean: 0.22, head: 0.26 });
+  const writing = t > T.sign - 0.2 && t < T.sign + 1.4, w = writing ? 1 : 0;
+  const F2 = { x: 400, y: F.floor, s: 1.9, dir: 1, outfit: 'franklinBare', seed: 324, light: L }, loc = p => [(p[0] - F2.x) / F2.s, (p[1] - F2.y) / F2.s];
+  const pen = writing ? [520 + 90 * invLerp(T.sign - 0.2, T.sign + 1.4, t), T2.top - 8 + 4 * Math.sin(t * 30)] : (t > T.sign - 1.5 && t < T.sign - 0.2 ? [730, T2.top - 40] : [500, T2.top - 20]);
+  fp.nh = loc(pen); fp.ne = [-0.5, 1]; fp.fh = loc([470, T2.top - 6]); fp.fe = [-1, 0.6];
+  drawChair(g, F2.x, F2.y, F2.s, 1, L, tick);
+  drawFigure(g, F2, fp, tick);
+  // The treaty on the table, filling up with his signature.
+  g.save(); g.translate(560, T2.top - 6); g.rotate(-0.04);
+  g.fillStyle = '#efe6cf'; g.fillRect(-60, -14, 190, 20); g.strokeStyle = '#6a5438'; g.lineWidth = 1; g.strokeRect(-60, -14, 190, 20);
+  const sg = clamp(invLerp(T.sign - 0.2, T.sign + 1.4, t));
+  if (sg > 0) { g.strokeStyle = '#1e140c'; g.lineWidth = 2; g.beginPath(); for (let u = 0; u <= sg; u += 0.02) g.lineTo(-40 + 150 * u, -4 + 4 * Math.sin(u * 40)); g.stroke(); }
+  g.restore();
+  const qx = pen[0], qy = pen[1];
+  QUILL_TIP(g, qx, qy, 0.5, -0.85 + (writing ? 0.05 * Math.sin(t * 23) : 0), mulberry32(hash3(tick, 2902)), L);
+  // The French and American flags, crossed, and gold lilies falling.
+  const fl = smooth(invLerp(T.flags, T.flags + 1, t));
+  if (fl > 0) {
+    g.save(); g.globalAlpha = fl;
+    drawPole(g, 300, 880 - 60 * fl, 1360, tick, L, 7); drawFlag(g, FLAGS.fr, tick, 303, 880 - 60 * fl, 230, 150, lt, { dir: 1, amp: 10, waves: 1.2, speed: 1 });
+    drawPole(g, 820, 880 - 60 * fl, 1360, tick, L, 7); drawFlag(g, FLAGS.us, tick, 817, 880 - 60 * fl, 230, 150, lt + 0.3, { dir: -1, amp: 10, waves: 1.2, speed: 1 });
+    g.restore();
+  }
+}
+function camFrance(lt) { const u = smooth(clamp(lt / durOf('france'))); return { z: lerp(1.42, 1.52, u), x: lerp(556, 566, u), y: lerp(1290, 1316, u), rot: 0 }; }
+SCN.france = { layers: [FRA_LAYER, FLAGS.fr, FLAGS.us], draw: drawFrance, cam: camFrance };
+// A courtly minuet (Petzold's Minuet in G) on plucked strings; the scratch of the pen on
+// the long held note; then a fanfare for the alliance.
+SCORE.france = (K, { B, b, s, dur, mel }) => {
+  const { N, one, pz, glock, bell, str, strH, brass, roll, bd } = K, T = FRA.T;
+  const minuet = [[0, 'D5', 1], [1, 'G4', 0.5], [1.5, 'A4', 0.5], [2, 'B4', 0.5], [2.5, 'C5', 0.5], [3, 'D5', 1], [4, 'G4', 1], [5, 'G4', 1],
+    [6, 'E5', 1], [7, 'C5', 0.5], [7.5, 'D5', 0.5], [8, 'E5', 0.5], [8.5, 'F#5', 0.5], [9, 'G5', 1], [10, 'G4', 1], [11, 'G4', 1],
+    [12, 'C5', 1], [13, 'D5', 0.5], [13.5, 'C5', 0.5], [14, 'B4', 0.5], [14.5, 'A4', 0.5], [15, 'B4', 1], [16, 'C5', 0.5], [16.5, 'B4', 0.5], [17, 'A4', 0.5], [17.5, 'G4', 0.5],
+    [18, 'F#4', 1], [19, 'G4', 0.5], [19.5, 'A4', 0.5], [20, 'B4', 0.5], [20.5, 'G4', 0.5], [21, 'A4', 3]];
+  mel(minuet, 0.62, 1, (t, n, d, v) => one(t, time => N.pz(n, time, v, Math.max(0.25, d * 0.8))));
+  for (const [bb, n, d] of minuet) glock(B(bb), K.up(n, 12), 0.1, d * b);
+  const bass = [['G3', 'B3', 'D4'], ['B3', 'G3', 'B3'], ['C4', 'A3', 'C4'], ['B3', 'G3', 'B3'], ['A3', 'F#3', 'A3'], ['G3', 'D3', 'G3'], ['D3', 'D4', 'C4'], ['D4', 'D3', 'D3']];
+  bass.forEach((bar, k) => bar.forEach((n, j) => pz(B(3 * k + j), n, j ? 0.36 : 0.5, 0.25)));
+  for (const [bb, d, n] of [[0, 6, ['G3', 'B3', 'D4']], [6, 6, ['C4', 'E4', 'G4']], [12, 6, ['G3', 'C4', 'E4']], [18, 3, ['D4', 'F#4', 'A4']]]) str(B(bb), d * b + 0.1, n, 0.2);
+  const qr = mulberry32(51);
+  for (let t = T.sign - 0.2; t < T.sign + 1.4; t += 0.08 + 0.06 * qr()) one(t, time => N.quill(time, 0.3 + 0.2 * qr()));
+  bell(T.sign + 1.5, 'G4', 0.4, 3);
+  roll(T.flags - 1, T.flags - 0.03, 0.05, 0.45, 0.04); bd(T.flags, 0.6);
+  for (const [bb, n, d] of [[27, ['G4', 'D5'], 0.5], [27.5, ['G4', 'D5'], 0.5], [28, ['B4', 'G5'], 1], [29, ['D5', 'B5'], 1], [30, ['C5', 'A5'], 1], [31, ['D5', 'B5'], 2]]) brass(B(bb), d * b * 0.95, n, 0.56);
+  strH(B(27), s.end - B(27) + 0.3, ['G2', 'D3', 'B3', 'G4'], 0.38);
+  ['G5', 'B5', 'D6', 'G6'].forEach((n, k) => glock(B(31) + k * 0.12, n, 0.3, 1.5));
+};
 
 /* ===================== scene 6 — surrender at Yorktown, 1781 =============== */
 const YK = (() => {
