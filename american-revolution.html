@@ -1816,7 +1816,7 @@ const CARD = new BoilLayer({
   },
 });
 
-/* ======================= scene 1 — the colonies, 1765 ===================== */
+/* ================ scene 1 — British North America, 1763 =================== */
 const MAPF = { x0: 44, y0: 318, x1: 1036, y1: 1500 };
 const proj = ([lon, lat]) => [(lon + 84) * 55, 322 + (45.8 - lat) * 69.8];
 const COAST_LL = [[-64.9, 45.62], [-65.5, 45.36], [-66.06, 45.27], [-66.6, 45.12], [-67.0, 44.92], [-67.35, 44.66], [-67.85, 44.5], [-68.3, 44.3], [-68.8, 44.45], [-69.0, 44.1], [-69.5, 43.95], [-69.85, 43.75], [-70.25, 43.62], [-70.4, 43.35], [-70.72, 43.08], [-70.82, 42.87], [-70.62, 42.65], [-70.95, 42.45], [-71.02, 42.33], [-70.85, 42.2], [-70.63, 41.95], [-70.52, 41.78], [-70.25, 41.74], [-70.02, 41.8], [-70.06, 41.98], [-70.18, 42.05], [-70.08, 42.07], [-69.96, 41.9], [-69.93, 41.67], [-70.3, 41.63], [-70.62, 41.55], [-70.9, 41.62], [-71.12, 41.5], [-71.38, 41.45], [-71.5, 41.38], [-71.85, 41.32], [-72.2, 41.3], [-72.9, 41.25], [-73.35, 41.1], [-73.65, 40.98], [-73.8, 40.84], [-74.0, 40.68], [-74.2, 40.55], [-74.05, 40.45], [-73.98, 40.2], [-74.05, 39.9], [-74.2, 39.6], [-74.45, 39.35], [-74.75, 39.05], [-74.95, 38.93], [-74.95, 39.2], [-75.3, 39.35], [-75.5, 39.58], [-75.55, 39.45], [-75.4, 39.18], [-75.3, 38.9], [-75.08, 38.78], [-75.06, 38.45], [-75.12, 38.25], [-75.35, 37.9], [-75.65, 37.5], [-75.95, 37.12], [-75.98, 37.45], [-75.9, 37.8], [-76.05, 38.2], [-76.25, 38.55], [-76.1, 38.95], [-76.15, 39.3], [-76.05, 39.55], [-76.35, 39.4], [-76.5, 39.2], [-76.45, 38.85], [-76.5, 38.45], [-76.35, 38.1], [-76.4, 37.85], [-76.3, 37.55], [-76.4, 37.25], [-76.3, 37.0], [-76.0, 36.92], [-75.85, 36.55], [-75.7, 36.1], [-75.5, 35.6], [-75.53, 35.23], [-76.0, 35.06], [-76.5, 34.7], [-77.05, 34.62], [-77.55, 34.35], [-77.95, 33.85], [-78.5, 33.87], [-78.95, 33.62], [-79.2, 33.25], [-79.6, 32.95], [-79.92, 32.75], [-80.4, 32.45], [-80.75, 32.15], [-80.9, 32.0], [-81.15, 31.6], [-81.3, 31.25], [-81.45, 30.9], [-81.45, 30.5], [-81.38, 30.1], [-81.3, 29.8], [-81.2, 29.4], [-81.0, 29.0], [-80.8, 28.6]];
@@ -2592,6 +2592,7 @@ function* facadeG(g, rng, Q, o) {
 }
 function* buildKingStreet(g, rng) {
   const L = MAS_LIGHT, vp = MAS.vp, moon = [214, 270];
+  nightUnderlay(g, { x0: -40, y0: -40, x1: 1120, y1: 1040 }, moon, { bottom: '#262e4c', halo: 260 });
   // Night sky with the moon, stars and a few clouds.
   yield* pencilG(g, rng, { x0: -40, y0: -40, x1: 1120, y1: 1040 }, () => true, (x, y) => clamp(0.12 + 0.28 * (y / 1000) + 0.5 * Math.exp(-(Math.hypot(x - moon[0], y - moon[1]) - 52) / 170) + 0.08 * fbm(x * 0.004, y * 0.006, 41)), SKY_NIGHT,
     { flow: FLOW.mix(FLOW.noise(0.1, 0.5, 0.002, 41), FLOW.around(moon[0], moon[1]), (x, y) => clamp(1 - (Math.hypot(x - moon[0], y - moon[1]) - 50) / 260)), curve: 0.45, gap: 4.4, len: [18, 36], crossOff: 0.6, crossAmt: 0.7, washAlpha: 0.38 });
@@ -2774,7 +2775,7 @@ SCORE.massacre = (K, { B, b, s, dur, mel }) => {
   roll(B(29), s.end - 0.04, 0.05, 0.3, 0.05);
 };
 
-/* ===================== scene 2 — the Boston Tea Party, 1773 ================ */
+/* ===================== scene 5 — the Boston Tea Party, 1773 ================ */
 const TEA = (() => {
   const B = beatOf('tea'), bl = beatLen('tea');
   const rail = curveY([[-40, 1016], [100, 1004], [250, 1062], [450, 1086], [700, 1086], [840, 1062], [880, 1000], [1010, 986], [1120, 984]]);
@@ -2799,6 +2800,15 @@ const TEA = (() => {
   return { B, bl, rail, throwers, chests, MOON, MASTS, PIVOT, bld, spires, S, deck, lantern: { x: 432, outfit: 'colonistC', seed: 53 }, hang: [818, 902] };
 })();
 const SKY_NIGHT = ['#0e1226', '#151b36', '#1d2546', '#283257', '#37436a', '#526088', '#7b87a8'];
+// Night skies are laid on a dark ground first, so no paper glints between the strokes.
+function nightUnderlay(g, box, moon, o = {}) {
+  g.save();
+  if (o.clip) { g.beginPath(); o.clip(g); g.clip(); }
+  const gr = g.createLinearGradient(0, box.y0, 0, box.y1); gr.addColorStop(0, o.top || '#0f1428'); gr.addColorStop(1, o.bottom || '#1f2745');
+  g.fillStyle = gr; g.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+  if (moon) { const R = o.halo || 330, h = g.createRadialGradient(moon[0], moon[1], 40, moon[0], moon[1], R); h.addColorStop(0, 'rgba(96,110,146,0.75)'); h.addColorStop(1, 'rgba(40,48,76,0)'); g.fillStyle = h; g.fillRect(moon[0] - R, moon[1] - R, 2 * R, 2 * R); }
+  g.restore();
+}
 function skylineTop(x) {
   let top = 1045;
   for (const b of TEA.bld) if (x >= b.x && x < b.x + b.w) top = b.roof ? b.top + Math.abs(x - (b.x + b.w / 2)) * 0.55 : b.top;
@@ -2811,6 +2821,7 @@ function skylineTop(x) {
 function* buildTeaSky(g, rng) {
   const box = { x0: -30, y0: -30, x1: 1110, y1: 1120 }, M = TEA.MOON;
   const md = (x, y) => Math.hypot(x - M.x, y - M.y);
+  nightUnderlay(g, box, [M.x, M.y], { clip: c => { c.moveTo(box.x0, box.y0); c.lineTo(box.x1, box.y0); for (let x = box.x1; x >= box.x0; x -= 6) c.lineTo(x, skylineTop(x) + 2); c.closePath(); } });
   yield* pencilG(g, rng, box, (x, y) => y < skylineTop(x) && md(x, y) > M.r + 3,
     (x, y) => clamp(0.1 + 0.3 * (y / 1050) + 0.55 * Math.exp(-(md(x, y) - M.r) / 150) + 0.1 * fbm(x * 0.004, y * 0.006, 12)), SKY_NIGHT,
     { flow: FLOW.mix(FLOW.noise(-0.06, 0.3, 0.0022, 2), FLOW.around(M.x, M.y), (x, y) => clamp(1 - (md(x, y) - M.r) / 230)), curve: 0.4, gap: 4.4, len: [16, 34], crossOff: 0.55, crossAmt: 0.7, washAlpha: 0.38 });
@@ -2847,6 +2858,7 @@ function* buildTeaSky(g, rng) {
 function* buildTeaWater(g, rng) {
   const box = { x0: -30, y0: 1030, x1: 1110, y1: 1950 }, M = TEA.MOON;
   const col = (x, y) => { const w = 36 + (y - 1040) * 0.14; return Math.exp(-(((x - M.x) / w) ** 2)) * (0.55 + 0.45 * Math.sin(y * 0.21 + Math.sin(x * 0.05) * 2)); };
+  nightUnderlay(g, { x0: box.x0, y0: 1042, x1: box.x1, y1: box.y1 }, null, { top: '#141c34', bottom: '#0a0f1c' });
   yield* pencilG(g, rng, box, (x, y) => y > 1044 + 2 * Math.sin(x * 0.05), (x, y) => clamp(0.14 + 0.1 * fbm(x * 0.01, y * 0.03, 8) + 0.1 * (1 - (y - 1040) / 900) + 0.75 * col(x, y)),
     ['#070b17', '#0d1426', '#141d36', '#1d2a48', '#2d3d60', '#556688', '#9aa8bf', '#dfe3de'], { flow: FLOW.noise(0, 0.1, 0.005, 6), curve: 0.45, gap: 4.2, len: [16, 42], crossAmt: 0.5, crossAngle: 0.3 });
   // Far wharf and pilings.
@@ -3411,6 +3423,7 @@ const REV_LAYERS = {
 // The ride's sky: moonlit clouds that curl around the moon, and stars.
 function* buildRideSky(g, rng) {
   const moon = [820, 330], md = (x, y) => Math.hypot(x - moon[0], y - moon[1]);
+  nightUnderlay(g, { x0: -40, y0: -40, x1: 1120, y1: 1260 }, moon, { bottom: '#2a3252' });
   yield* pencilG(g, rng, { x0: -40, y0: -40, x1: 1120, y1: 1260 }, (x, y) => md(x, y) > 66, (x, y) => clamp(0.12 + 0.34 * (y / 1150) + 0.5 * Math.exp(-(md(x, y) - 66) / 230) + 0.1 * fbm(x * 0.004, y * 0.006, 85)), SKY_NIGHT,
     { flow: FLOW.mix(FLOW.noise(0.05, 0.35, 0.002, 85), FLOW.around(moon[0], moon[1]), (x, y) => clamp(1.1 - (md(x, y) - 66) / 320)), curve: 0.5, gap: 4.4, len: [18, 40], crossOff: 0.6, crossAmt: 0.7, washAlpha: 0.4 });
   const cl = styles([['#48527a', 2.8, 0.55], ['#8a93b2', 2.6, 0.5], ['#c9cbd2', 2.2, 0.45]], 4);
@@ -3502,7 +3515,7 @@ SCORE.revere = (K, { B, b, s, dur, mel }) => {
   roll(B(49), s.end - 0.04, 0.2, 0.7, 0.042);
 };
 
-/* =================== scene 3 — Lexington & Concord, 1775 ================== */
+/* ========================= scene 9 — Lexington, 1775 ====================== */
 const SKY_DAWN = ['#6d7c99', '#8290ab', '#9ca7bc', '#c3b6b0', '#e2bea2', '#efd0ac', '#f6e3c3'];
 const GRASS = ['#3f5a2c', '#526d34', '#67813f', '#7e954c', '#97a862', '#b0b97c'];
 const lexHorizon = x => 905 + 18 * Math.sin(x * 0.004 + 0.5) + 10 * vnoise(x * 0.01, 3);
@@ -4290,7 +4303,7 @@ SCORE.paine = (K, { B, b, s, dur, mel }) => {
   strH(B(22), s.end - B(22) + 0.3, ['G2', 'D3', 'B3', 'G4'], 0.36);
 };
 
-/* =============== scene 4 — the Declaration of Independence, 1776 ============ */
+/* ============== scene 14 — the Declaration of Independence, 1776 =========== */
 const PARCH = (() => {
   const P = [], r = mulberry32(404);
   const x0 = 128, x1 = 952, y0 = 36, y1 = 2090;
@@ -4674,7 +4687,7 @@ SCORE.retreat = (K, { B, b, s, dur, mel }) => {
   pz(B(14), 'D2', 0.4, 1.2);
 };
 
-/* ================= scene 5 — crossing the Delaware, 1776 =================== */
+/* ================ scene 17 — crossing the Delaware, 1776 ================== */
 const STORM = { tint: '#26304c', amt: 0.34, dark: 0.12, ink: '#10131f', dir: [0.5, -0.86] };
 const DEL = (() => {
   const s0 = sceneById.delaware.start, bl = beatLen('delaware');
@@ -4687,6 +4700,7 @@ const DEL = (() => {
 const bankTop = x => 812 + 30 * Math.sin(x * 0.006 + 0.3) + 18 * vnoise(x * 0.012, 41);
 function* buildDelSky(g, rng) {
   const box = { x0: -40, y0: -40, x1: 1120, y1: 880 };
+  nightUnderlay(g, box, [820, 260], { top: '#12151f', bottom: '#262b3c', halo: 240 });
   yield* pencilG(g, rng, box, () => true, (x, y) => clamp(0.12 + 0.3 * (y / 880) + 0.35 * smooth(clamp(fbm(x * 0.003, y * 0.005, 51) + 0.1)) + 0.25 * Math.exp(-Math.hypot(x - 820, y - 260) / 170)),
     ['#11141f', '#181c2b', '#212739', '#2c3349', '#3b435b', '#555d74', '#7c8298'], { flow: FLOW.noise(-0.35, 1.0, 0.0022, 51), curve: 0.6, gap: 4.4, len: [20, 40], crossOff: 0.8, crossAmt: 0.75, washAlpha: 0.4 });
 }
@@ -4718,6 +4732,7 @@ function* buildDelRiver(g, rng) {
   const tone = (x, y) => clamp(0.22 + 0.16 * Math.sin(TAU * x / P * 3 + y * 0.013) * Math.sin(y * 0.031) + 0.12 * Math.sin(TAU * x / P * 7 + y * 0.05) + 0.25 * (1 - (y - 930) / 1030) * 0.6);
   const pal = ['#0b1019', '#111a26', '#182536', '#213247', '#2e435b', '#4a6078', '#8595a8'];
   const main = styles(pal.map(c => [c, 2.6, 0.88]), 5), wash = styles(pal.map(c => [c, 6, 0.35]), 3), hi = styles([['#a9b6c6', 2.2, 0.65]], 3);
+  nightUnderlay(g, box, null, { top: '#1c2a3c', bottom: '#111a26' });
   const pick = (x, y, r) => clamp(Math.floor((tone(x, y) + (r() - 0.5) * 0.25) * pal.length), 0, pal.length - 1);
   const rflow = (x, y) => 0.08 * Math.sin(TAU * x / P * 3 + y * 0.02) + 0.05 * Math.sin(y * 0.11);
   yield* hatchG(rng, box, { angle: -0.02, flow: rflow, curve: 0.3, gap: 6.5, lenMin: 30, lenMax: 60, jitter: 0.08, spacing: 0.55 }, (x, y, r) => wash[pick(x, y, r)]);
@@ -6325,7 +6340,7 @@ SCORE.siege = (K, { B, b, s, dur, mel }) => {
   roll(B(28), s.end - 0.05, 0.12, 0.6, 0.045);
 };
 
-/* ===================== scene 6 — surrender at Yorktown, 1781 =============== */
+/* ==================== scene 26 — surrender at Yorktown, 1781 =============== */
 const YK = (() => {
   const s0 = sceneById.yorktown.start, S = 118, cyc = 1.8, s = 1.18, v = S / cyc * s;          // px per second
   const stopX = 4 * S * s, gap = 2.1;
@@ -6593,7 +6608,7 @@ function drawSeal(g, x, y, t, tp, tick) {
   sketchLine(g, Array.from({ length: 17 }, (_, k) => [x + Math.cos(k / 16 * TAU) * R, y + Math.sin(k / 16 * TAU) * R * 0.92]), rng, 0.8, '#4a1210', 1.6, 0.8);
 }
 // The brass seal-stamp: carried from seal to seal, pressed down, lifted.
-function drawStamp(g, t, tick) {
+function drawSealStamp(g, t, tick) {
   const rest = [1060, 1560], P = TRE_SIGS.map(([, x, y, sx], k) => ({ p: [sx, y - 12], tp: TRE.seal(k) }));
   let pos = rest, h = 60;
   for (let k = 0; k < P.length; k++) {
@@ -6617,7 +6632,7 @@ function drawTreaty(g, t, lt, tick) {
   TRE_LAYER.draw(g, tick);
   TRE_SIGS.forEach(([, x, y, sx], k) => drawSeal(g, sx, y - 12, t, TRE.seal(k), tick));
   TRE.draw(g, lt, tick);
-  drawStamp(g, t, tick);
+  drawSealStamp(g, t, tick);
   // Candle flame and its light.
   const fl = 0.85 + 0.15 * vnoise(t * 7, 2707), fx = 1011 + 3 * vnoise(t * 5, 2708), fy = 238;
   g.save(); g.globalCompositeOperation = 'lighter';
@@ -7028,7 +7043,7 @@ SCORE.inauguration = (K, { B, b, s, dur, mel }) => {
   ['D6', 'F#6', 'A6', 'D7'].forEach((n, k) => glock(B(22) + k * 0.12, n, 0.3, 1.6));
 };
 
-/* ======================= scene 7 — peace, 1783 ============================= */
+/* ==================== scene 31 — the United States: the end ================= */
 function* buildPeaceBg(g, rng) {
   const box = { x0: -40, y0: -40, x1: 1120, y1: 1960 }, sun = { x: 330, y: 1000, r: 112 };
   const far = x => 980 + 26 * Math.sin(x * 0.005 + 1) + 12 * vnoise(x * 0.01, 91);
