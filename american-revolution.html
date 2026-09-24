@@ -540,12 +540,16 @@ function* stippleG(g, rng, box, inside, tone, pal, o = {}) {
     paths[clamp(Math.floor((tone(x, y) + (rng() - 0.5) * 0.3) * n), 0, n - 1)].push(x, y, size * (0.5 + rng()));
     if (i % 20000 === 19999) yield;
   }
-  paths.forEach((a, k) => {
-    g.fillStyle = pal[k]; g.globalAlpha = o.alpha ?? 0.8; g.beginPath();
-    for (let i = 0; i < a.length; i += 3) { g.moveTo(a[i] + a[i + 2], a[i + 1]); g.arc(a[i], a[i + 1], a[i + 2], 0, TAU); }
-    g.fill();
-  });
-  g.globalAlpha = 1;
+  // Filled in batches, so a big stipple never holds up a frame.
+  for (let k = 0; k < paths.length; k++) {
+    const a = paths[k], B = 3 * 5000;
+    for (let s0 = 0; s0 < a.length; s0 += B) {
+      g.fillStyle = pal[k]; g.globalAlpha = o.alpha ?? 0.8; g.beginPath();
+      for (let i = s0; i < Math.min(a.length, s0 + B); i += 3) { g.moveTo(a[i] + a[i + 2], a[i + 1]); g.arc(a[i], a[i + 1], a[i + 2], 0, TAU); }
+      g.fill(); g.globalAlpha = 1;
+      yield;
+    }
+  }
 }
 // An inked contour with pencil pressure: the weight swells and thins along it and
 // the pencil lifts off now and then.
@@ -6567,7 +6571,7 @@ function* buildTreatyBg(g, rng) {
   const box = { x0: -60, y0: -300, x1: 1140, y1: 2200 }, inP = polyMask([TRE_PAGE], box, 3);
   // Green baize: a felted stipple over a flat ground, no stroke direction at all.
   g.fillStyle = '#2c4232'; g.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
-  yield* stippleG(g, rng, box, (x, y) => !inP(x, y), (x, y) => clamp(0.5 + 0.2 * fbm(x * 0.004, y * 0.004, 2702) - 0.25 * smooth(clamp(Math.hypot(x - 1010, y - 240) / 1500))), ['#1e3024', '#2a4030', '#36523c', '#46644a', '#587658'], { density: 0.09, size: 2.4 });
+  yield* stippleG(g, rng, box, (x, y) => !inP(x, y), (x, y) => clamp(0.5 + 0.2 * fbm(x * 0.004, y * 0.004, 2702) - 0.25 * smooth(clamp(Math.hypot(x - 1010, y - 240) / 1500))), ['#1e3024', '#2a4030', '#36523c', '#46644a', '#587658'], { density: 0.06, size: 2.6 });
   // Laid paper: a pale ground, chain lines down, laid lines across.
   g.fillStyle = '#e6dcc4'; g.beginPath(); polyPath(g, TRE_PAGE); g.fill();
   g.save(); g.beginPath(); polyPath(g, TRE_PAGE); g.clip();
@@ -6881,7 +6885,9 @@ function camConstitution(lt) {
   const c = CST.c, sy = CST.sy, pe = CST.pe, dur = durOf('constitution');
   const y = track([[0, 330], [c('preamble') - 0.2, 340], [c('preamble') + 1.5, 520], [c('articles'), pe - 60], [c('articles') + 1.5, pe + 250], [c('sign') - 0.2, pe + 420], [c('sign') + 1, sy - 20], [c('others') + 1, sy + 160], [dur, sy + 30]])(lt);
   const z = track([[0, 2.0], [c('preamble') - 0.2, 1.9], [c('preamble') + 1.5, 1.35], [c('articles'), 1.3], [c('sign'), 1.15], [c('sign') + 1, 1.25], [c('others') + 1, 1.08], [dur, 0.98]])(lt);
-  return { z, x: track([[0, 540], [c('sign'), 560], [dur, 560]])(lt), y, rot: -0.02 };
+  // In the close-up the camera travels with the quill along "We the People".
+  const follow = 1 - smooth(invLerp(c('preamble') - 0.2, c('preamble') + 1.2, lt)), nx = clamp(CST.nib(Math.max(lt, c('header'))).x, 404, 676);
+  return { z, x: lerp(track([[0, 540], [c('sign'), 560], [dur, 560]])(lt), nx, follow), y, rot: -0.02 };
 }
 SCN.constitution = { layers: [CST_LAYER], draw: drawConstitution, cam: camConstitution, over: drawConstitutionOver };
 // Hopeful and broad, in C: "We the People" climbs a major arpeggio; the quill scratches
@@ -7138,7 +7144,7 @@ Object.assign(SCN, {
   yorktown:    { layers: [YORK_LAYER, FLAGS.us, FLAGS.fr], draw: drawYorktown, cam: camYorktown },
   finale:      { layers: [PEACE_LAYER, FLAGS.us], draw: drawPeace, cam: camPeace },
 });
-// A plain title card for any scene that has no drawing yet.
+// A plain title card for any scene added to SCENE_LIST without a drawing.
 for (const s of SCENES) {
   if (SCN[s.id]) continue;
   SCN[s.id] = {
