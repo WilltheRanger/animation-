@@ -6658,12 +6658,12 @@ SCN.treaty = { layers: [TRE_LAYER], draw: drawTreaty, cam: camTreaty };
 SCORE.treaty = (K, { B, b, s, dur, mel }) => {
   const { N, one, glock, bell, pz, str, strH } = K;
   const bars = [['G2', ['G3', 'B3', 'D4']], ['D2', ['F#3', 'A3', 'D4']], ['E2', ['G3', 'B3', 'E4']], ['C2', ['G3', 'C4', 'E4']], ['G2', ['G3', 'B3', 'D4']], ['A2', ['E3', 'A3', 'C#4']], ['D2', ['F#3', 'A3', 'D4']], ['G2', ['G3', 'B3', 'D4']]];
-  bars.forEach(([bass, ch], i) => { pz(B(i * 3), bass, 0.55, 0.5); str(B(i * 3), 3 * b * 0.95, ch, 0.24); pz(B(i * 3 + 1), ch[0], 0.3, 0.3); pz(B(i * 3 + 2), ch[1], 0.3, 0.3); });
-  mel([[0, 'D5', 2], [2, 'B4', 1], [3, 'A4', 1], [4, 'B4', 0.5], [4.5, 'C5', 0.5], [5, 'D5', 1], [6, 'E5', 2], [8, 'D5', 1], [9, 'C5', 2], [11, 'B4', 1], [12, 'G5', 2], [14, 'F#5', 1], [15, 'E5', 1.5], [16.5, 'C#5', 0.5], [17, 'A4', 1], [18, 'D5', 1], [19, 'E5', 1], [20, 'F#5', 1], [21, 'G5', 3]], 0.4, 0, (tt, n, d, v) => glock(tt, n, v * 0.7, d));
+  bars.forEach(([bass, ch], i) => { pz(B(i * 3), bass, 0.8, 0.5); str(B(i * 3), 3 * b * 0.95, ch, 0.36); pz(B(i * 3 + 1), ch[0], 0.45, 0.3); pz(B(i * 3 + 2), ch[1], 0.45, 0.3); });
+  mel([[0, 'D5', 2], [2, 'B4', 1], [3, 'A4', 1], [4, 'B4', 0.5], [4.5, 'C5', 0.5], [5, 'D5', 1], [6, 'E5', 2], [8, 'D5', 1], [9, 'C5', 2], [11, 'B4', 1], [12, 'G5', 2], [14, 'F#5', 1], [15, 'E5', 1.5], [16.5, 'C#5', 0.5], [17, 'A4', 1], [18, 'D5', 1], [19, 'E5', 1], [20, 'F#5', 1], [21, 'G5', 3]], 0.6, 0, (tt, n, d, v) => glock(tt, n, v * 0.7, d));
   for (let tt = s.start + 0.9; tt < s.start + TRE.c('sign') - 0.5; tt += 0.11 + 0.08 * Math.abs(Math.sin(tt * 13))) one(tt, time => N.quill(time, 0.18));
   for (let k = 0; k < 4; k++) { const t0 = s.start + TRE.c('sign') + k * 1.3; for (let tt = t0; tt < t0 + 1; tt += 0.09) one(tt, time => N.quill(time, 0.22)); one(TRE.seal(k) + 0.05, time => N.gavel(time, 0.35)); }
-  bell(B(21), 'G4', 0.4, 4); bell(B(21) + 0.02, 'D5', 0.25, 4);
-  strH(B(21), s.end - B(21) + 0.3, ['G3', 'B3', 'D4', 'G4'], 0.3);
+  bell(B(21), 'G4', 0.55, 4); bell(B(21) + 0.02, 'D5', 0.35, 4);
+  strH(B(21), s.end - B(21) + 0.3, ['G3', 'B3', 'D4', 'G4'], 0.42);
 };
 
 /* ===================== scene 28 — Washington resigns, 1783 ==================== */
@@ -6818,8 +6818,8 @@ SCN.farewell = { layers: [FAR_LAYERS.room, FAR_LAYERS.desk], draw: drawFarewell,
 SCORE.farewell = (K, { B, b, s, dur, mel }) => {
   const { N, one, hold, bell, glock, pz, str, strH, brass } = K, T = FAR.T;
   const ch = [[0, ['F2', 'C3', 'A3', 'F4']], [2, ['D2', 'A2', 'F3', 'D4']], [4, ['Bb1', 'F2', 'D3', 'Bb3']], [6, ['C2', 'G2', 'E3', 'C4']], [8, ['F2', 'C3', 'A3', 'F4']], [10, ['Bb1', 'F2', 'D3', 'F4']], [12, ['G2', 'D3', 'Bb3', 'D4']], [14, ['C2', 'G2', 'E3', 'G4']], [16, ['F2', 'C3', 'A3', 'F4']]];
-  ch.forEach(([bb, n], i) => str(B(bb), (i === ch.length - 1 ? s.end - B(bb) + 0.3 : 2 * b * 0.98), n, 0.26));
-  mel([[0, 'A4', 1], [1, 'Bb4', 1], [2, 'A4', 1.5], [3.5, 'G4', 0.5], [4, 'F4', 2], [6, 'G4', 1], [7, 'E4', 1], [8, 'F4', 1], [9, 'A4', 1], [10, 'D5', 2], [12, 'C5', 1], [13, 'Bb4', 1], [14, 'A4', 1], [15, 'G4', 1], [16, 'F4', 4]], 0.34);
+  ch.forEach(([bb, n], i) => str(B(bb), (i === ch.length - 1 ? s.end - B(bb) + 0.3 : 2 * b * 0.98), n, 0.33));
+  mel([[0, 'A4', 1], [1, 'Bb4', 1], [2, 'A4', 1.5], [3.5, 'G4', 0.5], [4, 'F4', 2], [6, 'G4', 1], [7, 'E4', 1], [8, 'F4', 1], [9, 'A4', 1], [10, 'D5', 2], [12, 'C5', 1], [13, 'Bb4', 1], [14, 'A4', 1], [15, 'G4', 1], [16, 'F4', 4]], 0.44);
   for (const [bb, n, d] of [[10, 'F3', 2], [12, 'D3', 2], [14, 'C3', 2], [16, 'F3', 4]]) brass(B(bb), d * b * 0.95, [n, K.up(n, 7)], 0.34);
   hold(T.bow, s.end - T.bow, (time, into) => N.crowdOn(time, into, s.end - T.bow, 0.16, 1.5));
   bell(T.hand, 'F4', 0.35, 4); glock(T.hand + 0.1, 'C6', 0.2, 2); glock(T.hand + 0.3, 'F6', 0.16, 2);
@@ -6898,7 +6898,7 @@ SCORE.constitution = (K, { B, b, s, dur, mel }) => {
   strH(B(0.5), B(8) - B(0.5), ['C3', 'G3', 'E4'], 0.3);
   const wr = (a, z, v) => { for (let tt = s.start + a; tt < s.start + z; tt += 0.1 + 0.07 * Math.abs(Math.sin(tt * 11))) one(tt, time => N.quill(time, v)); };
   wr(c('header'), c('preamble') - 0.2, 0.26); wr(c('preamble'), c('articles') - 0.2, 0.2); wr(c('articles'), c('sign') - 0.2, 0.2); wr(c('sign'), c('others') - 0.3, 0.26); wr(c('others'), dur - 1.7, 0.2);
-  for (const [bb, ch] of [[4, ['F3', 'A3', 'C4']], [8, ['C3', 'G3', 'E4']], [12, ['A2', 'E3', 'C4']], [14, ['F2', 'C3', 'A3']], [16, ['G2', 'D3', 'B3']]]) str(B(bb), 2 * b * 0.98 * (bb < 8 ? 2 : 1), ch, 0.26);
+  for (const [bb, ch] of [[4, ['F3', 'A3', 'C4']], [8, ['C3', 'G3', 'E4']], [12, ['A2', 'E3', 'C4']], [14, ['F2', 'C3', 'A3']], [16, ['G2', 'D3', 'B3']]]) str(B(bb), 2 * b * 0.98 * (bb < 8 ? 2 : 1), ch, 0.33);
   mel([[4, 'E5', 1.5], [5.5, 'D5', 0.5], [6, 'C5', 1], [7, 'G4', 1], [8, 'A4', 1], [9, 'C5', 1], [10, 'E5', 1], [11, 'D5', 1], [12, 'C5', 2], [14, 'A4', 1], [15, 'C5', 1], [16, 'B4', 1], [17, 'D5', 1]], 0.36);
   for (let bb = 4; bb < 18; bb++) pz(B(bb), bb % 2 ? 'G2' : 'C3', 0.35, 0.3);
   const sb = c('sign') / (dur / 28);
